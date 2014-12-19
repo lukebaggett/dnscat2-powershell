@@ -5,8 +5,7 @@ function dnscat2
     [alias("p")][ValidateRange(1,65535)][int32]$DNSPort=53,
     [alias("dns")][string]$Domain="",
     [alias("e")][string]$Exec="",
-    [alias("h")][switch]$Help=$False,
-    [alias("v")][switch]$Verbose=$False
+    [alias("h")][switch]$Help=$False
   )
 
   if($Help)
