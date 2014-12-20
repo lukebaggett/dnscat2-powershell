@@ -259,5 +259,6 @@ dnscat2: Powershell Version
   finally
   {
     SendPacket (CreatePacket_FIN $SessionId $Domain) | Out-Null
+    if($Process -ne $null){$Process | Stop-Process}
   }
 }
