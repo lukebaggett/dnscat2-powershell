@@ -6,7 +6,7 @@ To use this script, you'll need the ruby [dnscat2 server](https://github.com/iag
 
 ###dnscat2.ps1
     -Domain <domain>          The domain of the dnscat2 server
-    -DNSServer <host>         The DNS Server [default: 10.1.1.1]
+    -DNSServer <host>         The DNS Server [default: Windows default]
     -DNSPort -p <port>        The DNS port [default: 53]
     -Exec -e <process>        Execute the given process
     -Help                     Display this help message
