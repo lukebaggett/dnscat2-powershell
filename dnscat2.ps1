@@ -1,7 +1,7 @@
 function dnscat2
 {
   param(
-    [string]$DNSServer="10.1.1.1",
+    [string]$DNSServer="",
     [alias("p")][ValidateRange(1,65535)][int32]$DNSPort=53,
     [alias("dns")][string]$Domain="",
     [alias("e")][string]$Exec="",
@@ -14,7 +14,7 @@ function dnscat2
 dnscat2: Powershell Version
     
 -Domain <domain>          The domain of the dnscat2 server
--DNSServer <host>         The DNS Server [default: 10.1.1.1]
+-DNSServer <host>         The DNS Server [default: Windows default]
 -DNSPort -p <port>        The DNS port [default: 53]
 -Exec -e <process>        Execute the given process
 -Help -h                  Display this help message
