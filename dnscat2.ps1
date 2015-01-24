@@ -105,7 +105,7 @@ dnscat2: Powershell Version
       $ReturningData,
       $AcknowledgementNumber
     )
-    $Hex = [string]("{0:x}" -f ([uint16]("0x" + $AcknowledgementNumber) + $ReturningData.Length))
+    $Hex = [string]("{0:x}" -f (([uint16]("0x" + $AcknowledgementNumber) + $ReturningData.Length) % 65535))
     if($Hex.Length -ne 4){$Hex = (("0"*(4-$Hex.Length)) + $Hex)}
     return $Hex
   }
