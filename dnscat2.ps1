@@ -7,7 +7,7 @@ function dnscat2
     [alias("e")][string]$Exec="",
     [alias("h")][switch]$Help=$False
   )
-
+    
   if($Help)
   {
     "
@@ -73,7 +73,6 @@ dnscat2: Powershell Version
       $AcknowledgementNumber,
       $Data
     )
-    if($Data -eq ""){$Data = "0000"}
     return ($Tag + (Generate_Random) + "01" + $SessionId + $SequenceNumber + $AcknowledgementNumber + $Data + $Domain)
   }
   
@@ -185,7 +184,7 @@ dnscat2: Powershell Version
   if($DecodedPacket -eq 1){return "Bad SYN response. Ensure your server is set up correctly."}
   $ReturningData = $DecodedPacket[1]
   $AcknowledgementNumber = $DecodedPacket[2]
-  $MaxMSGDataSize = (250 - (CreatePacket_MSG $SessionId $SequenceNumber $AcknowledgementNumber "").Length)
+  $MaxMSGDataSize = (244 - (CreatePacket_MSG $SessionId $SequenceNumber $AcknowledgementNumber "").Length)
   if($MaxMSGDataSize -le 0){return "Domain name is too long."}
   
   try
@@ -229,7 +228,7 @@ dnscat2: Powershell Version
       }
       else
       {
-        $PacketsData = @("0000")
+        $PacketsData = @("")
       }
       
       $ReturningData = ""
