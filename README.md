@@ -1,3 +1,5 @@
+**Edit: This tool has not been updated to support the newer versions of [dnscat2](https://github.com/iagox86/dnscat2). If you experience problems, try using an [older version of dnscat2](https://github.com/iagox86/dnscat2/tree/839c9ba432472d8d58f938a477fe7e8808c96ad2).** Some updates will come in mid-December.
+
 [dnscat2](https://github.com/iagox86/dnscat2) is a DNS covert channel tool by [@iagox86 (Ron Bowes)](https://blog.skullsecurity.org/) which is used to transfer data over DNS requests.
 
 This is a work in progress powershell version of dnscat2.  Support for the command protocol will be added soon.
