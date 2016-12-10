@@ -252,6 +252,7 @@ dnscat2: Powershell Version
       {
         $AcknowledgementNumber = AcknowledgeData $ReturningData $AcknowledgementNumber
         WriteOutput $ReturningData
+        if ($ReturningData -like "*killed: *") { exit }
       }
     }
   }
