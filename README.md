@@ -2,7 +2,7 @@
 
 This is a work in progress powershell version of dnscat2.
 
-To use this dnscat2 client, you'll need to install the ruby [dnscat2 server](https://github.com/iagox86/dnscat2).
+**NOTE: To use this dnscat2 client, you'll need to install a slightly modified dnscat2 server to disable caching.** [Download the modified server here](https://github.com/lukebaggett/dnscat2), and use the --no-cache option when running the server.
 
 ### Start-Dnscat2
 
