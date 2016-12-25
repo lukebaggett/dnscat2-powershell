@@ -18,3 +18,9 @@ This is a work in progress powershell version of dnscat2.
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
+
+
+### Unsupported Features
+    Encryption
+    Tunnels
+    Only TXT requests are supported
