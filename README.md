@@ -11,16 +11,16 @@ This is a work in progress powershell version of dnscat2.
     -DNSServer <String>       The hostname or IP Address to send DNS queries to. (Default: Set by Windows)
     -DNSPort <Int32>          The port to send DNS queries to. (Default: 53)
     
-    -Command <Switch>         Start a command session. (Default)
+    -Command                  Start a command session. (Default)
     -Exec <String>            Link the I/O of a process with the Dnscat2 session.
-    -Console <Switch>         Link the I/O of the console with the Dnscat2 session.
+    -Console                  Link the I/O of the console with the Dnscat2 session.
     
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
 
 
-### Unsupported Features
+### Currently Unsupported Features
     Encryption
-    Tunnels
+    Tunnels (COMING SOON)
     Only TXT requests are supported
