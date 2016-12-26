@@ -2,8 +2,7 @@
 
 This is a work in progress powershell version of dnscat2.
 
-To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` and `-e open` options when running the server.**
-
+To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` and `-e open` options when running the server. This client does not support encryption and is incompatible with the server's caching.**
 
 ### Start-Dnscat2
 
@@ -18,7 +17,6 @@ To use this script, you'll need the ruby [dnscat2 server](https://github.com/iag
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
-
 
 ### Currently Unsupported Features
     Encryption
