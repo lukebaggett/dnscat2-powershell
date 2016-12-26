@@ -2,7 +2,7 @@
 
 This is a work in progress powershell version of dnscat2.
 
-To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). Make sure to add the `--no-cache` and `-e open` options when running the server.
+To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` and `-e open` options when running the server.**
 
 
 ### Start-Dnscat2
@@ -22,5 +22,4 @@ To use this script, you'll need the ruby [dnscat2 server](https://github.com/iag
 
 ### Currently Unsupported Features
     Encryption
-    Tunnels (COMING SOON)
-    Only TXT requests are supported
+    DNS Requests other than TXT requests are supported
