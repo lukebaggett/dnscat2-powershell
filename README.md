@@ -22,4 +22,4 @@ To use this script, you'll need the ruby [dnscat2 server](https://github.com/iag
 
 ### Currently Unsupported Features
     Encryption
-    DNS Requests other than TXT requests are supported
+    DNS Requests other than TXT requests are not supported
