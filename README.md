@@ -2,7 +2,7 @@
 
 This is a powershell version of the dnscat2 C client.
 
-To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` and `-e open` options when running the server. This client does not support encryption and is incompatible with the server's caching.**
+To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` option when running the server. This client is incompatible with the server's caching.**
 
 ### Setup
 
@@ -25,6 +25,9 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     Start a console session. Only use CNAME and MX requests:
         Start-Dnscat2 -Domain <dnscat2 server> -LookupTypes @("CNAME","MX") -Console
 
+    Do not encrypt the session. Encryption is enabled by default.
+        Start-Dnscat2 -Domain <dnscat2 server> -NoEncryption
+
 ### Start-Dnscat2
 
     -Domain <String>          The Domain being used by the dnscat2 server.
@@ -35,11 +38,13 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     -Exec <String>            Link the I/O of a process with the Dnscat2 session.
     -Console                  Link the I/O of the console with the Dnscat2 session.
     
+    -PreSharedSecret          Set the same secret on the server to authenticate and prevent MITM.
+    -NoEncryption             Do not use encryption.
+    
     -LookupTypes <String[]>   Set an array of lookup types to randomly switch between. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
 
 ### Currently Unsupported Features
-    Encryption
     A and AAAA requests are not supported
