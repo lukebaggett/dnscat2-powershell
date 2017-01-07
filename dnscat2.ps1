@@ -965,7 +965,7 @@ function Start-Dnscat2 {
     foreach ($LookupType in $LookupTypes) {
         if (!(@("TXT","MX","CNAME") -contains $LookupType)) {
             Write-Error ($LookupType + " is not a valid Lookup Type!")
-            Write-Error ("Only TXT and MX lookups are allowed!")
+            Write-Error ("Only TXT, MX, and CNAME lookups are allowed!")
             return
         }
     }
