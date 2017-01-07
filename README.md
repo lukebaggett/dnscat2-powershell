@@ -6,7 +6,7 @@ To use this script, you'll need the ruby [dnscat2 server](https://github.com/iag
 
 ### Setup
 
-[First, install the dnscat2 server.](https://github.com/iagox86/dnscat2/blob/master/README.md)
+[First, install the dnscat2 server.](https://github.com/iagox86/dnscat2/blob/master/README.md) Start the server with caching disabled using `--no-cache`. The command to start your server should look something like this: `ruby dnscat2.rb --dns="domain=example.com" --no-cache`
 
 Next, launch Windows Powershell (version 2.0 or later). You can use this command to load the dnscat2 powershell functions:
 
