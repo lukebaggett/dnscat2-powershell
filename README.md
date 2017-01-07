@@ -50,11 +50,11 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
     -Command                  Start a command session. (Default)
     -Exec <String>            Link the I/O of a process with the Dnscat2 session.
     -Console                  Link the I/O of the console with the Dnscat2 session.
+    -ExecPS                   Simulate a Powershell session and link the IO with the Dnscat2 session.
+                              WARNING: Exiting will kill the entire dnscat2 client, not just the session.
     
     -PreSharedSecret          Set the same secret on the server to authenticate and prevent MITM.
     -NoEncryption             Do not use encryption.
-    -ExecPS                   Simulate a Powershell session and link the IO with the Dnscat2 session.
-                              WARNING: Exiting will kill the entire dnscat2 client, not just the session.
     
     -LookupTypes <String[]>   Set an array of lookup types to randomly switch between. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
