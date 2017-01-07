@@ -40,6 +40,8 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     
     -PreSharedSecret          Set the same secret on the server to authenticate and prevent MITM.
     -NoEncryption             Do not use encryption.
+    -ExecPS                   Simulate a Powershell session and link the IO with the Dnscat2 session.
+                              WARNING: Exiting will kill the entire dnscat2 client, not just the session.
     
     -LookupTypes <String[]>   Set an array of lookup types to randomly switch between. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
