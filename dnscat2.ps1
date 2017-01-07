@@ -810,6 +810,7 @@ function Update-Dnscat2Session ($Session) {
             return $Session
         }
         
+        # Grab next data in the queue
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
         
         try {
