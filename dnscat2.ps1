@@ -177,7 +177,10 @@ function ConvertTo-EncryptedDnscat2Packet ($Packet, $EncryptionKeys) {
     [array]::Reverse($PaddedNonce)
     
     $PacketHeader = Convert-HexToBytes $Packet.Substring(0,10)
-    $PacketBody = Convert-HexToBytes $Packet.Substring(10)
+    [byte[]]$PacketBody = @()
+    if ($Packet.Length -gt 10) {
+        $PacketBody = Convert-HexToBytes $Packet.Substring(10)
+    }
     $EncryptedPacketBody = Convert-Salsa20 $PacketBody $EncryptionKeys["client_write"] $PaddedNonce
     $Signature = Get-Dnscat2PacketSignature $EncryptionKeys["client_mac"] $PacketHeader $PaddedNonce[6..7] $EncryptedPacketBody
     $EncryptedPacket = $Packet.Substring(0,10) + (Convert-BytesToHex $Signature) + ([Convert]::ToString($EncryptionKeys["nonce"], 16)).PadLeft(4, '0') + (Convert-BytesToHex $EncryptedPacketBody)
