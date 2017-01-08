@@ -890,9 +890,6 @@ function Stop-Dnscat2Session ($Session) {
 
 function Update-Dnscat2Session ($Session) {
     try {
-        # Delay
-        Sleep -Milliseconds $Session['Delay']
-    
         # Retrive Driver Data
         $Session = Read-DataFromDriver $Session
         
@@ -911,6 +908,9 @@ function Update-Dnscat2Session ($Session) {
         
         # Grab next data in the queue
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
+        
+        # Delay
+        Sleep -Milliseconds $Session['Delay']
         
         try {
             $MSGPACKET = (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData)
