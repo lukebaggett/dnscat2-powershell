@@ -59,6 +59,7 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
     -LookupTypes <String[]>   Set an array of lookup types to randomly switch between.
                               Only TXT, MX, CNAME, A, and AAAA records are supported. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
+    -MaxRandomDelay <Int32>   Set the max value of a random delay added to the normal delay, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
 
