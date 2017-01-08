@@ -105,7 +105,7 @@ function New-RandomDNSField ($Length) {
 }
 
 function Update-Dnscat2ACK ($Data, $AcknowledgementNumber) {
-    return ([string]("{0:x}" -f (([uint16]("0x" + $AcknowledgementNumber) + $Data.Length/2) % 65535)))
+    return ([string]("{0:x}" -f (([int]("0x" + $AcknowledgementNumber) + $Data.Length/2) % 65535))).PadLeft(4,"0")
 }
 
 function Compare-SequenceNumber ($SequenceNumber, $AcknowledgementNumber) {
