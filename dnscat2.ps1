@@ -234,7 +234,81 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
             $Done = $True
             $result = ([string](($result[($result.IndexOf("canonical name =") + 17)..$result.Length] -join '').split("`n")[0])).replace($Domain,"").replace(".","").replace("`n","").replace(" ","").Trim()
         }
+    } elseif ($LookupType -eq "A") {
+        if ($result.Contains('Name')) {
+            $Done = $True
+            [byte[]]$Data = @()
+            
+            # Extract and sort the IPs
+            $regex = [regex] "\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+            $IPs = ($regex.Matches($result.Substring($result.IndexOf("Name"))) | %{ $_.value }) | sort {"{0:d3}.{1:d3}.{2:d3}.{3:d3}" -f @([int[]]$_.split('.'))}
+            
+            # First response is different, it has a length field
+            $PacketLength = [Convert]::ToUInt16($IPs[0].split(".")[1])
+            $IPs[0].split(".")[2..3] | % { $Data += [Convert]::ToUInt16($_) }
+            $IPs = $IPs[1..$IPs.Count]
+            
+            # Strip the sequence numbers out of the other packets
+            if ($IPs.Count -gt 0) {
+                foreach ($IP in $IPs) {
+                    $IP.split(".")[1..3] | % { $Data += [Convert]::ToUInt16($_) }
+                }
+            }
+            
+            # Return result as hex and strip out the padding
+            $result = Convert-BytesToHex $Data[0..($PacketLength - 1)]
+        }
+    } elseif ($LookupType -eq "AAAA") {
+        if ($result.Contains('Name')) {
+            $Done = $True
+            $Data = ""
+            
+            # Extract the IPs
+            $regex = [regex] "(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"
+            $IPs = @()
+            $IPs += ($regex.Matches($result.Substring($result.IndexOf("Name"))) | % { if ($_.value -ne "::") {$_.value} } )
+
+            # Expand the IPv6 address
+            for ($i = 0; $i -lt $IPs.Count; $i++) {
+                [byte[]]$ipbytes = ([Net.IPAddress]$IPs[$i]).GetAddressBytes();
+                $bldr = New-Object System.Text.StringBuilder
+                for ($b =0; $b -lt 16; $b += 2) {
+                    $bldr.AppendFormat("{0:x2}{1:x2}:", $ipbytes[$b], $ipbytes[$b+1]) | Out-Null
+                }
+                $bldr.Length = $bldr.Length-1
+                $IPs[$i] = $bldr.ToString()
+            }
+            
+            # Sort the IPs based on first two bytes
+            for ($i = 1; $i -lt $IPs.Count; $i++) {
+                $element = $IPs[$i]
+                $j = $i
+                
+                while (($j -gt 0) -and ([Convert]::ToUInt16(($element[0..1] -join ""), 16) -lt [Convert]::ToUInt16(($IPs[$j - 1][0..1] -join ""),16))) {
+                    $IPs[$j] = $IPs[$j - 1]
+                    $j = $j - 1
+                }
+                
+                $IPs[$j] = $element
+            }
+            
+            # First response is different, it has a length field
+            $PacketLength = [Convert]::ToUInt16($IPs[0].Substring(2,2),16)
+            $Data += $IPs[0].replace(":","").Substring(4) # Strip length and seq from start
+            
+            # Grab data from responses after the first
+            $IPs = $IPs[1..$IPs.Count]
+            if ($IPs.Count -gt 0) {
+                foreach ($IP in $IPs) {
+                    $Data += $IP.replace(":","").Substring(2) # Strip seq from start
+                }
+            }
+            
+            # Return result as hex and strip out the padding
+            $result = $Data.Substring(0, $PacketLength*2)
+        }
     }
+    
     
     if ($Done) {
         if ($Encryption) {
@@ -933,7 +1007,7 @@ function Start-Dnscat2 {
     
     .PARAMETER LookupTypes
         Set an array of lookup types. Each packet has its lookup type randomly selected from the array.
-        Only TXT, MX, and CNAME records are supported. Default: @(TXT, MX, CNAME)
+        Only TXT, MX, CNAME, A, and AAAA records are supported. Default: @(TXT, MX, CNAME)
     
     .PARAMETER Delay
         Set a delay between each request, in milliseconds. (Default: 0)
@@ -963,9 +1037,9 @@ function Start-Dnscat2 {
     )
     
     foreach ($LookupType in $LookupTypes) {
-        if (!(@("TXT","MX","CNAME") -contains $LookupType)) {
+        if (!(@("TXT","MX","CNAME","A","AAAA") -contains $LookupType)) {
             Write-Error ($LookupType + " is not a valid Lookup Type!")
-            Write-Error ("Only TXT, MX, and CNAME lookups are allowed!")
+            Write-Error ("Only TXT, MX, CNAME, A, and AAAA lookups are allowed!")
             return
         }
     }

