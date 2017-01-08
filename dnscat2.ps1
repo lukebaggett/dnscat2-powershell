@@ -267,7 +267,7 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
             $regex = [regex] "(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"
             $IPs = @()
             $IPs += ($regex.Matches($result.Substring($result.IndexOf("Name"))) | % { if ($_.value -ne "::") {$_.value} } )
-
+            
             # Expand the IPv6 address
             for ($i = 0; $i -lt $IPs.Count; $i++) {
                 [byte[]]$ipbytes = ([Net.IPAddress]$IPs[$i]).GetAddressBytes();
@@ -279,18 +279,8 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
                 $IPs[$i] = $bldr.ToString()
             }
             
-            # Sort the IPs based on first two bytes
-            for ($i = 1; $i -lt $IPs.Count; $i++) {
-                $element = $IPs[$i]
-                $j = $i
-                
-                while (($j -gt 0) -and ([Convert]::ToUInt16(($element[0..1] -join ""), 16) -lt [Convert]::ToUInt16(($IPs[$j - 1][0..1] -join ""),16))) {
-                    $IPs[$j] = $IPs[$j - 1]
-                    $j = $j - 1
-                }
-                
-                $IPs[$j] = $element
-            }
+            # Sort
+            $IPs = $IPs | sort
             
             # First response is different, it has a length field
             $PacketLength = [Convert]::ToUInt16($IPs[0].Substring(2,2),16)
@@ -308,7 +298,6 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
             $result = $Data.Substring(0, $PacketLength*2)
         }
     }
-    
     
     if ($Done) {
         if ($Encryption) {
