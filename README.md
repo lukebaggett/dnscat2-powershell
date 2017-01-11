@@ -66,3 +66,7 @@ The client can handle normal dnscat2 commands, or the *powershell version* of th
 ### ExecPS and 'exec psh'
 
 dnscat2-powershell simulates a powershell session by passing data from the server to Invoke-Expression. Only stdout is returned, and variables are preserved as long as the client is running. **Watch out** for things that exit powershell like "exit" and "break", because the entire dnscat2-powershell client will exit, not just the ExecPS session.
+
+### Other Credits
+
+[db9 on stackoverflow's](https://stackoverflow.com/users/6866918/db9) [demonstration of BouncyCastle ECDH.](http://stackoverflow.com/a/39662164)
