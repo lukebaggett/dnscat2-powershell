@@ -2,6 +2,8 @@
 
 This is a powershell version of the dnscat2 C client.
 
+[Click here for a blog post](http://www.blackhillsinfosec.com/?p=5578) that gives a more detailed breakdown of the purpose of this script, and how to use it.
+
 To use this script, you'll need the ruby [dnscat2 server](https://github.com/iagox86/dnscat2). **Make sure to add the `--no-cache` option when running the server. This client is incompatible with the server's caching.**
 
 ### Setup
