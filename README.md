@@ -71,4 +71,6 @@ dnscat2-powershell simulates a powershell session by passing data from the serve
 
 ### Other Credits
 
-[db9 on stackoverflow's](https://stackoverflow.com/users/6866918/db9) [demonstration of BouncyCastle ECDH.](http://stackoverflow.com/a/39662164)
+* [db9 on stackoverflow's](https://stackoverflow.com/users/6866918/db9) [demonstration of BouncyCastle ECDH.](http://stackoverflow.com/a/39662164)
+* [FrankSpierings's](https://github.com/FrankSpierings) implementation of [Salsa20](https://gist.github.com/FrankSpierings/c18da658e06948313fff) and [Sha3](https://gist.github.com/FrankSpierings/3577b0365d02df6f7eeb) in Powershell via C#.
+* [Rebex Labs stripped down version of the BouncyCastle DLL for ECC.](http://labs.rebex.net/curves)
