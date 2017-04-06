@@ -2028,6 +2028,19 @@ function Start-Dnscat2 {
         [ValidateRange(1,240)][int32]$MaxPacketSize=240,
         [Alias("n")][string]$Name=""
     )
+	
+    if ($DNSServer -eq "") {
+		Write-Verbose "No DNS Server specified! Checking DNS settings..."
+	    $DNSServers = @()
+        $regex = [regex] "\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+        $regex.Matches((ipconfig /all | Select-String "DNS Servers" | Out-String)) | %{ $DNSServers += $_.value }
+		if ($DNSServers.Count -eq 0) {
+		    Write-Error ("Couldn't find default DNS server. Please specify a DNS server with -DNSServer.")
+			return
+		}
+		$DNSServer = $DNSServers[0]
+		Write-Verbose ("DNSServer set to " + $DNSServer)
+    }
     
     foreach ($LookupType in $LookupTypes) {
         if (!(@("TXT","MX","CNAME","A","AAAA") -contains $LookupType)) {
