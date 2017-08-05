@@ -1032,13 +1032,10 @@ function Convert-BytesToHex ($Bytes) {
     return ([System.BitConverter]::ToString($Bytes) -replace '-')
 }
 
-# Converts a hex string to a byte array of 16 bit elements
-# Input String must have an even length
 function Convert-HexToBytes ($Hex) {
     [byte[]]$Bytes = @()
-    while ($Hex.Length -gt 0) {
-        $Bytes += [Convert]::ToInt16(($Hex[0..1] -join ""),16)
-        $Hex = $Hex.Substring(2)
+    for ($x = 0; $x -lt $Hex.Length; $x += 2) {
+        $Bytes += [Convert]::ToInt16(($Hex[$x..($x+1)] -join ""),16)
     }
     return $Bytes
 }
