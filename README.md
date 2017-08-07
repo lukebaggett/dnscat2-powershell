@@ -1,7 +1,6 @@
 ```diff
-- WARNING!!!
-- The upload and download functions inside the command session are currently unstable.
-- Please use the original executable client if you require those functions!
+- The upload and download functions inside the command session only work consistently with small files.
+- Please use the original executable client if you require larger file transfers.
 ```
 
 [dnscat2](https://github.com/iagox86/dnscat2) is a DNS covert channel tool by [@iagox86 (Ron Bowes)](https://blog.skullsecurity.org/) which is used to transfer data over DNS requests.
