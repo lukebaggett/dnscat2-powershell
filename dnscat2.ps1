@@ -2138,6 +2138,7 @@ function Start-Dnscat2 {
                     $Sessions[$SessionId].NewSessions = New-Object System.Collections.Hashtable
                 }
             }
+            Start-Sleep -Milliseconds 100
         }
     } finally {
         $SessionIds = @()
